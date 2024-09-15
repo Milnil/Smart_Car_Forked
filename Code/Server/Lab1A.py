@@ -96,30 +96,46 @@ class CombinedCar:
 
     def line_tracking(self):
         LMR = self.read_line_sensors()
-        if LMR == 2:
+        if LMR == 2:  # Middle sensor detects line
             self.PWM.setMotorModel(800, 800, 800, 800)
-        elif LMR == 4:
+        elif LMR == 4:  # Left sensor detects line
             self.PWM.setMotorModel(-1500, -1500, 2500, 2500)
-        elif LMR == 6:
+        elif LMR == 6:  # Left and middle sensors detect line
             self.PWM.setMotorModel(-2000, -2000, 4000, 4000)
-        elif LMR == 1:
+        elif LMR == 1:  # Right sensor detects line
             self.PWM.setMotorModel(2500, 2500, -1500, -1500)
-        elif LMR == 3:
+        elif LMR == 3:  # Right and middle sensors detect line
             self.PWM.setMotorModel(4000, 4000, -2000, -2000)
-        elif LMR == 7:
+        elif LMR == 7:  # All sensors detect line
             self.PWM.setMotorModel(0, 0, 0, 0)
+        elif LMR == 0:  # No line detected
+            self.PWM.setMotorModel(800, 800, 800, 800)  # Proceed straight
         else:
             self.PWM.setMotorModel(0, 0, 0, 0)
 
     def run(self):
         while True:
+            # Check for obstacles
             self.pwm_S.setServoPwm("0", 90)
             time.sleep(0.1)
             self.M = self.get_distance()
-            if self.M < 10:
+            if self.M < 15:
+                # Obstacle detected, perform obstacle avoidance
                 self.obstacle_avoidance()
             else:
-                self.line_tracking()
+                # No obstacle detected
+                LMR = self.read_line_sensors()
+                if LMR != 0:
+                    # Line detected, perform line tracking
+                    self.line_tracking()
+                else:
+                    # No line detected, proceed straight
+                    self.PWM.setMotorModel(800, 800, 800, 800)
+
+    def cleanup(self):
+        self.PWM.setMotorModel(0, 0, 0, 0)
+        self.pwm_S.setServoPwm('0', 90)
+        GPIO.cleanup()
 
 # Main program logic follows:
 if __name__ == '__main__':
@@ -128,6 +144,4 @@ if __name__ == '__main__':
     try:
         car.run()
     except KeyboardInterrupt:
-        car.PWM.setMotorModel(0, 0, 0, 0)
-        car.pwm_S.setServoPwm('0', 90)
-        GPIO.cleanup()
+        car.cleanup()
