@@ -1,8 +1,8 @@
 import time
 from Motor import *
 import RPi.GPIO as GPIO
-from servo import *
 from PCA9685 import PCA9685
+from Led import Led  # Import the Led class
 
 class CombinedCar:
     def __init__(self):
@@ -23,10 +23,11 @@ class CombinedCar:
         GPIO.setup(self.IR01, GPIO.IN)
         GPIO.setup(self.IR02, GPIO.IN)
         GPIO.setup(self.IR03, GPIO.IN)
-        # Initialize Motor and Servo
+        # Initialize Motor
         self.PWM = Motor()
-        self.pwm_S = Servo()
         self.M = 0
+        # Initialize LED
+        self.led = Led()
 
     def pulseIn(self, pin, level, timeOut):
         t0 = time.time()
@@ -62,34 +63,52 @@ class CombinedCar:
         return LMR
 
     def obstacle_avoidance(self):
-        # Rotate servo to scan left and right
-        distances = {}
-        angles = [30, 90, 150]
-        for angle in angles:
-            self.pwm_S.setServoPwm("0", angle)
-            time.sleep(0.2)
-            dist = self.get_distance()
-            distances[angle] = dist
+        # Activate LEDs when obstacle is detected
+        print("Obstacle detected! Activating LEDs.")
+        self.led.colorWipe(self.led.strip, Color(255, 0, 0))  # Red color
 
-        self.pwm_S.setServoPwm("0", 90)  # Reset servo to center
+        # Measure front distance (already done)
+        front_distance = self.M
+        print(f"Front distance: {front_distance} cm")
+
+        # Turn car to the left and measure distance
+        print("Turning left to scan for obstacle.")
+        self.PWM.setMotorModel(-1500, -1500, 1500, 1500)  # Turn left
+        time.sleep(0.5)  # Adjust time to turn appropriate angle
+        self.PWM.setMotorModel(0, 0, 0, 0)
+        time.sleep(0.1)
+        left_distance = self.get_distance()
+        print(f"Left distance: {left_distance} cm")
+
+        # Turn car to the right to scan right
+        print("Turning right to scan for obstacle.")
+        self.PWM.setMotorModel(1500, 1500, -1500, -1500)  # Turn right
+        time.sleep(1.0)  # Adjust time to turn from left position to right position
+        self.PWM.setMotorModel(0, 0, 0, 0)
+        time.sleep(0.1)
+        right_distance = self.get_distance()
+        print(f"Right distance: {right_distance} cm")
+
+        # Return to center position
+        print("Returning to center position.")
+        self.PWM.setMotorModel(-1500, -1500, 1500, 1500)  # Turn left
+        time.sleep(0.5)  # Adjust time to return to center
+        self.PWM.setMotorModel(0, 0, 0, 0)
+        time.sleep(0.1)
 
         # Decide direction to avoid obstacle
-        left_distance = distances[30]
-        right_distance = distances[150]
-        front_distance = distances[90]
-
         if left_distance > right_distance:
-            # Turn left
-            print("Obstacle detected! Turning left.")
-            self.PWM.setMotorModel(-1500, -1500, 2000, 2000)
+            # Turn left to avoid obstacle
+            print("Choosing to turn left to avoid obstacle.")
+            self.PWM.setMotorModel(-1500, -1500, 1500, 1500)  # Turn left
         else:
-            # Turn right
-            print("Obstacle detected! Turning right.")
-            self.PWM.setMotorModel(2000, 2000, -1500, -1500)
+            # Turn right to avoid obstacle
+            print("Choosing to turn right to avoid obstacle.")
+            self.PWM.setMotorModel(1500, 1500, -1500, -1500)  # Turn right
 
-        time.sleep(1)  # Adjust this delay as needed
+        time.sleep(0.5)  # Adjust this delay as needed
 
-        # Move forward a bit after turning
+        # Move forward to bypass obstacle
         print("Moving forward to bypass obstacle.")
         self.PWM.setMotorModel(1000, 1000, 1000, 1000)
         time.sleep(1)
@@ -102,7 +121,9 @@ class CombinedCar:
             # Obstacle still present, recursively avoid
             self.obstacle_avoidance()
         else:
-            print("Obstacle avoided, resuming line tracking.")
+            print("Obstacle avoided, deactivating LEDs, resuming line tracking.")
+            # Deactivate LEDs after obstacle is avoided
+            self.led.colorWipe(self.led.strip, Color(0, 0, 0), 10)  # Turn off LEDs
 
     def line_tracking(self):
         LMR = self.read_line_sensors()
@@ -126,7 +147,6 @@ class CombinedCar:
     def run(self):
         while True:
             # Check for obstacles
-            self.pwm_S.setServoPwm("0", 90)
             time.sleep(0.1)
             self.M = self.get_distance()
             if self.M < 30:
@@ -141,7 +161,8 @@ class CombinedCar:
 
     def cleanup(self):
         self.PWM.setMotorModel(0, 0, 0, 0)
-        self.pwm_S.setServoPwm('0', 90)
+        # Turn off LEDs during cleanup
+        self.led.colorWipe(self.led.strip, Color(0, 0, 0), 10)
         GPIO.cleanup()
 
 # Main program logic follows:
