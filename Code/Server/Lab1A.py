@@ -61,49 +61,59 @@ class CombinedCar:
             LMR |= 1
         return LMR
 
-    def run_motor(self, L, M, R):
-        if (L < 30 and M < 30 and R < 30) or M < 30:
-            self.PWM.setMotorModel(-1000, -1000, -1000, -1000)
-            time.sleep(0.1)
-            if L < R:
-                self.PWM.setMotorModel(1000, 1000, -1000, -1000)
-            else:
-                self.PWM.setMotorModel(-1000, -1000, 1000, 1000)
-        elif L < 30 and M < 30:
-            self.PWM.setMotorModel(1500, 1500, -1500, -1500)
-        elif R < 30 and M < 30:
-            self.PWM.setMotorModel(-1500, -1500, 1500, 1500)
-        elif L < 20:
-            self.PWM.setMotorModel(1500, 1500, -500, -500)
-            if L < 10:
-                self.PWM.setMotorModel(1500, 1500, -1000, -1000)
-        elif R < 20:
-            self.PWM.setMotorModel(-500, -500, 1500, 1500)
-            if R < 10:
-                self.PWM.setMotorModel(-1000, -1000, 1000, 1000)
-        else:
-            self.PWM.setMotorModel(600, 600, 600, 600)
-
     def obstacle_avoidance(self):
-        self.pwm_S.setServoPwm("0", 30)
-        time.sleep(0.2)
-        L = self.get_distance()
-        self.pwm_S.setServoPwm("0", 151)
-        time.sleep(0.2)
-        R = self.get_distance()
-        self.run_motor(L, self.M, R)
-        self.pwm_S.setServoPwm("0", 90)
+        # Rotate servo to scan left and right
+        distances = {}
+        angles = [30, 90, 150]
+        for angle in angles:
+            self.pwm_S.setServoPwm("0", angle)
+            time.sleep(0.2)
+            dist = self.get_distance()
+            distances[angle] = dist
+
+        self.pwm_S.setServoPwm("0", 90)  # Reset servo to center
+
+        # Decide direction to avoid obstacle
+        left_distance = distances[30]
+        right_distance = distances[150]
+        front_distance = distances[90]
+
+        if left_distance > right_distance:
+            # Turn left
+            print("Obstacle detected! Turning left.")
+            self.PWM.setMotorModel(-1500, -1500, 2000, 2000)
+        else:
+            # Turn right
+            print("Obstacle detected! Turning right.")
+            self.PWM.setMotorModel(2000, 2000, -1500, -1500)
+
+        time.sleep(1)  # Adjust this delay as needed
+
+        # Move forward a bit after turning
+        print("Moving forward to bypass obstacle.")
+        self.PWM.setMotorModel(1000, 1000, 1000, 1000)
+        time.sleep(1)
+
+        # Check if obstacle is still in front
+        self.PWM.setMotorModel(0, 0, 0, 0)
+        time.sleep(0.1)
+        self.M = self.get_distance()
+        if self.M < 30:
+            # Obstacle still present, recursively avoid
+            self.obstacle_avoidance()
+        else:
+            print("Obstacle avoided, resuming line tracking.")
 
     def line_tracking(self):
         LMR = self.read_line_sensors()
         if LMR == 2:  # Middle sensor detects line
             self.PWM.setMotorModel(800, 800, 800, 800)
         elif LMR == 4:  # Left sensor detects line
-            self.PWM.setMotorModel(-1500, -1500, 2500, 2500)
+            self.PWM.setMotorModel(-1500, -1500, 2000, 2000)
         elif LMR == 6:  # Left and middle sensors detect line
             self.PWM.setMotorModel(-2000, -2000, 4000, 4000)
         elif LMR == 1:  # Right sensor detects line
-            self.PWM.setMotorModel(2500, 2500, -1500, -1500)
+            self.PWM.setMotorModel(2000, 2000, -1500, -1500)
         elif LMR == 3:  # Right and middle sensors detect line
             self.PWM.setMotorModel(4000, 4000, -2000, -2000)
         elif LMR == 7:  # All sensors detect line
@@ -119,18 +129,15 @@ class CombinedCar:
             self.pwm_S.setServoPwm("0", 90)
             time.sleep(0.1)
             self.M = self.get_distance()
-            if self.M < 15:
+            if self.M < 30:
                 # Obstacle detected, perform obstacle avoidance
+                self.PWM.setMotorModel(0, 0, 0, 0)  # Stop before avoiding
                 self.obstacle_avoidance()
+                # After avoiding, continue to next loop iteration
+                continue
             else:
-                # No obstacle detected
-                LMR = self.read_line_sensors()
-                if LMR != 0:
-                    # Line detected, perform line tracking
-                    self.line_tracking()
-                else:
-                    # No line detected, proceed straight
-                    self.PWM.setMotorModel(800, 800, 800, 800)
+                # No obstacle detected, perform line tracking
+                self.line_tracking()
 
     def cleanup(self):
         self.PWM.setMotorModel(0, 0, 0, 0)
