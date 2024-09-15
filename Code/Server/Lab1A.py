@@ -3,122 +3,107 @@ from Motor import *
 import RPi.GPIO as GPIO
 from servo import *
 from PCA9685 import PCA9685
+from Line_Tracking import Line_Tracking
+from Ultrasonic import Ultrasonic
+import random
+import logging
 
-class Line_Tracking:
+class SmartCar:
     def __init__(self):
-        self.IR01 = 14
-        self.IR02 = 15
-        self.IR03 = 23
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.IR01, GPIO.IN)
-        GPIO.setup(self.IR02, GPIO.IN)
-        GPIO.setup(self.IR03, GPIO.IN)
-    
-    def read_sensors(self):
-        LMR = 0x00
-        if GPIO.input(self.IR01):
-            LMR |= 4
-        if GPIO.input(self.IR02):
-            LMR |= 2
-        if GPIO.input(self.IR03):
-            LMR |= 1
-        return LMR
-    
-    def control_motors(self, LMR):
-        if LMR == 2:
-            PWM.setMotorModel(800, 800, 800, 800)  # Go forward
-        elif LMR == 4:
-            PWM.setMotorModel(-1500, -1500, 2500, 2500)  # Turn left
-        elif LMR == 6:
-            PWM.setMotorModel(-2000, -2000, 4000, 4000)  # Turn left sharply
-        elif LMR == 1:
-            PWM.setMotorModel(2500, 2500, -1500, -1500)  # Turn right
-        elif LMR == 3:
-            PWM.setMotorModel(4000, 4000, -2000, -2000)  # Turn right sharply
-        elif LMR == 7:
-            PWM.setMotorModel(0, 0, 0, 0)  # Stop
-
-class Ultrasonic:
-    def __init__(self):
-        self.trigger_pin = 27
-        self.echo_pin = 22
-        self.MAX_DISTANCE = 300  # cm
-        self.timeOut = self.MAX_DISTANCE * 60  # Timeout calculation
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.trigger_pin, GPIO.OUT)
-        GPIO.setup(self.echo_pin, GPIO.IN)
+        self.PWM = Motor()
         self.pwm_S = Servo()
-
-    def get_distance(self):
-        GPIO.output(self.trigger_pin, GPIO.HIGH)
-        time.sleep(0.00001)
-        GPIO.output(self.trigger_pin, GPIO.LOW)
+        self.infrared = Line_Tracking()
+        self.ultrasonic = Ultrasonic()
+        self.min_distance = 30  # Minimum safe distance in cm
         
-        start_time = time.time()
-        while GPIO.input(self.echo_pin) == GPIO.LOW:
-            if time.time() - start_time > self.timeOut:
-                return self.MAX_DISTANCE
+        # Setup logging
+        logging.basicConfig(level=logging.INFO, 
+                            format='%(asctime)s - %(levelname)s - %(message)s',
+                            handlers=[
+                                logging.FileHandler("smart_car.log"),
+                                logging.StreamHandler()
+                            ])
+        self.logger = logging.getLogger("SmartCar")
 
-        start = time.time()
-        while GPIO.input(self.echo_pin) == GPIO.HIGH:
-            if time.time() - start > self.timeOut:
-                return self.MAX_DISTANCE
+    def get_line_status(self):
+        self.LMR = 0x00
+        if GPIO.input(self.infrared.IR01):
+            self.LMR |= 4
+        if GPIO.input(self.infrared.IR02):
+            self.LMR |= 2
+        if GPIO.input(self.infrared.IR03):
+            self.LMR |= 1
+        return self.LMR
 
-        distance = (time.time() - start) * 17150
-        return round(distance, 2)
-    
-    def avoid_obstacle(self, reverse=False):
-        distance = self.get_distance()
-        if distance < 30:
-            # Obstacle detected: reverse if requested
-            if reverse:
-                PWM.setMotorModel(-1500, -1500, -1500, -1500)  # Back up
-                time.sleep(1)
-
-            # Turn and attempt to avoid obstacle
-            self.pwm_S.setServoPwm('0', 30)  # Turn left
-            time.sleep(0.2)
-            left_distance = self.get_distance()
-            
-            self.pwm_S.setServoPwm('0', 151)  # Turn right
-            time.sleep(0.2)
-            right_distance = self.get_distance()
-
-            # Choose the direction with more space
-            if left_distance > right_distance:
-                PWM.setMotorModel(-1500, -1500, 2500, 2500)  # Turn left
-            else:
-                PWM.setMotorModel(2500, 2500, -1500, -1500)  # Turn right
-            
-            self.pwm_S.setServoPwm('0', 90)  # Reset to center
+    def follow_line(self):
+        line_status = self.get_line_status()
+        if line_status == 2:
+            self.PWM.setMotorModel(800, 800, 800, 800)  # Forward
+            self.logger.info("Line detected in center. Moving forward.")
+        elif line_status == 4:
+            self.PWM.setMotorModel(-1500, -1500, 2500, 2500)  # Turn left
+            self.logger.info("Line detected on left. Turning left.")
+        elif line_status == 1:
+            self.PWM.setMotorModel(2500, 2500, -1500, -1500)  # Turn right
+            self.logger.info("Line detected on right. Turning right.")
+        elif line_status == 0:
+            self.PWM.setMotorModel(800, 800, 800, 800)  # Forward if no line detected
+            self.logger.warning("No line detected. Moving forward slowly.")
+        elif line_status == 7:
+            self.PWM.setMotorModel(0, 0, 0, 0)  # Stop if all sensors triggered
+            self.logger.warning("All sensors triggered. Possible intersection or wide line. Stopping.")
         else:
-            return False  # No obstacle
-        return True
+            self.PWM.setMotorModel(0, 0, 0, 0)  # Stop if uncertain
+            self.logger.warning(f"Unexpected line status: {line_status}. Stopping.")
 
-# Main program that integrates line tracking and obstacle avoidance
-if __name__ == '__main__':
-    print('Program is starting ...')
-    line_tracking = Line_Tracking()
-    ultrasonic = Ultrasonic()
+    def avoid_obstacle(self):
+        self.logger.info("Starting obstacle avoidance maneuver.")
+        self.PWM.setMotorModel(0, 0, 0, 0)  # Stop
+        self.logger.info("Stopped.")
+        time.sleep(0.5)
+        self.PWM.setMotorModel(-1000, -1000, -1000, -1000)  # Back up
+        self.logger.info("Backing up.")
+        time.sleep(0.5)
+        # Turn randomly left or right
+        turn_direction = random.choice([-1, 1])
+        turn_direction_str = "left" if turn_direction == -1 else "right"
+        self.PWM.setMotorModel(turn_direction * 2000, turn_direction * 2000, 
+                               -turn_direction * 2000, -turn_direction * 2000)
+        self.logger.info(f"Turning {turn_direction_str}.")
+        time.sleep(0.5)
+        self.logger.info("Finished obstacle avoidance maneuver.")
 
-    try:
+    def run(self):
+        self.logger.info("Smart car started running.")
         while True:
-            # Check for obstacles first
-            obstacle_detected = ultrasonic.avoid_obstacle()
-            
-            # Check line tracking status
-            LMR = line_tracking.read_sensors()
+            # Check for obstacles
+            self.pwm_S.setServoPwm("0", 90)  # Set servo to look forward
+            time.sleep(0.1)
+            distance = self.ultrasonic.get_distance()
 
-            if not obstacle_detected:
-                if LMR != 0:  # If there is a line to follow
-                    line_tracking.control_motors(LMR)
-                else:
-                    print("Line lost, reversing and avoiding obstacle...")
-                    PWM.setMotorModel(-1500, -1500, -1500, -1500)  # Back up
-                    time.sleep(1)
-                    # Then check for obstacles while backing up
-                    ultrasonic.avoid_obstacle(reverse=True)
-            time.sleep(0.05)
+            self.logger.debug(f"Current distance to obstacle: {distance} cm")
+
+            if distance < self.min_distance:
+                self.logger.warning(f"Obstacle detected at {distance} cm. Avoiding.")
+                self.avoid_obstacle()
+            else:
+                # No obstacle, follow the line
+                self.logger.debug("No obstacle detected. Following line.")
+                self.follow_line()
+
+            time.sleep(0.05)  # Small delay to prevent CPU overload
+
+if __name__ == '__main__':
+    print('Program is starting...')
+    try:
+        car = SmartCar()
+        car.run()
     except KeyboardInterrupt:
+        print("Program stopped by user")
         PWM.setMotorModel(0, 0, 0, 0)
-        ultrasonic.pwm_S.setServoPwm('0', 90)
+        car.pwm_S.setServoPwm('0', 90)
+        logging.info("Program terminated by user.")
+    except Exception as e:
+        logging.exception("An unexpected error occurred:")
+        PWM.setMotorModel(0, 0, 0, 0)
+        car.pwm_S.setServoPwm('0', 90)
