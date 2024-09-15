@@ -67,10 +67,15 @@ class Ultrasonic:
         distance = (time.time() - start) * 17150
         return round(distance, 2)
     
-    def avoid_obstacle(self):
+    def avoid_obstacle(self, reverse=False):
         distance = self.get_distance()
         if distance < 30:
-            # Stop or avoid
+            # Obstacle detected: reverse if requested
+            if reverse:
+                PWM.setMotorModel(-1500, -1500, -1500, -1500)  # Back up
+                time.sleep(1)
+
+            # Turn and attempt to avoid obstacle
             self.pwm_S.setServoPwm('0', 30)  # Turn left
             time.sleep(0.2)
             left_distance = self.get_distance()
@@ -79,6 +84,7 @@ class Ultrasonic:
             time.sleep(0.2)
             right_distance = self.get_distance()
 
+            # Choose the direction with more space
             if left_distance > right_distance:
                 PWM.setMotorModel(-1500, -1500, 2500, 2500)  # Turn left
             else:
@@ -100,10 +106,18 @@ if __name__ == '__main__':
             # Check for obstacles first
             obstacle_detected = ultrasonic.avoid_obstacle()
             
+            # Check line tracking status
+            LMR = line_tracking.read_sensors()
+
             if not obstacle_detected:
-                # Perform line tracking if no obstacle
-                LMR = line_tracking.read_sensors()
-                line_tracking.control_motors(LMR)
+                if LMR != 0:  # If there is a line to follow
+                    line_tracking.control_motors(LMR)
+                else:
+                    print("Line lost, reversing and avoiding obstacle...")
+                    PWM.setMotorModel(-1500, -1500, -1500, -1500)  # Back up
+                    time.sleep(1)
+                    # Then check for obstacles while backing up
+                    ultrasonic.avoid_obstacle(reverse=True)
             time.sleep(0.05)
     except KeyboardInterrupt:
         PWM.setMotorModel(0, 0, 0, 0)
