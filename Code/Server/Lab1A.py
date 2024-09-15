@@ -116,7 +116,7 @@ class CombinedCar:
             self.pwm_S.setServoPwm("0", 90)
             time.sleep(0.1)
             self.M = self.get_distance()
-            if self.M < 30:
+            if self.M < 10:
                 self.obstacle_avoidance()
             else:
                 self.line_tracking()
