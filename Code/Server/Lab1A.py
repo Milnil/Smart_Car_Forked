@@ -4,6 +4,7 @@ import RPi.GPIO as GPIO
 from PCA9685 import PCA9685
 from Led import Led  # Import the Led class
 
+
 class CombinedCar:
     def __init__(self):
         # Initialize GPIO
@@ -31,12 +32,12 @@ class CombinedCar:
 
     def pulseIn(self, pin, level, timeOut):
         t0 = time.time()
-        while (GPIO.input(pin) != level):
-            if ((time.time() - t0) > timeOut * 0.000001):
+        while GPIO.input(pin) != level:
+            if (time.time() - t0) > timeOut * 0.000001:
                 return 0
         t0 = time.time()
-        while (GPIO.input(pin) == level):
-            if ((time.time() - t0) > timeOut * 0.000001):
+        while GPIO.input(pin) == level:
+            if (time.time() - t0) > timeOut * 0.000001:
                 return 0
         pulseTime = (time.time() - t0) * 1000000
         return pulseTime
@@ -106,7 +107,7 @@ class CombinedCar:
             print("Choosing to turn right to avoid obstacle.")
             self.PWM.setMotorModel(1500, 1500, -1500, -1500)  # Turn right
 
-        time.sleep(0.5)  # Adjust this delay as needed
+        time.sleep(0.5)
 
         # Move forward to bypass obstacle
         print("Moving forward to bypass obstacle.")
@@ -153,8 +154,10 @@ class CombinedCar:
                 # Obstacle detected, perform obstacle avoidance
                 self.PWM.setMotorModel(0, 0, 0, 0)  # Stop before avoiding
                 self.obstacle_avoidance()
-                # After avoiding, continue to next loop iteration
-                continue
+                
+                # I think the continue is unecessary
+                # # After avoiding, continue to next loop iteration
+                # continue
             else:
                 # No obstacle detected, perform line tracking
                 self.line_tracking()
@@ -165,10 +168,11 @@ class CombinedCar:
         self.led.colorWipe(self.led.strip, Color(0, 0, 0), 10)
         GPIO.cleanup()
 
+
 # Main program logic follows:
-if __name__ == '__main__':
+if __name__ == "__main__":
     car = CombinedCar()
-    print('Program is starting ... ')
+    print("Program is starting ... ")
     try:
         car.run()
     except KeyboardInterrupt:
