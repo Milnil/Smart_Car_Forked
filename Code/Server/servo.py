@@ -1,5 +1,5 @@
 from PCA9685 import PCA9685
-
+import time
 
 class Servo:
     def __init__(self):
@@ -46,7 +46,15 @@ class Servo:
 
 if __name__ == '__main__':
     pwm = Servo()
-    pwm.setServoPwm('0', 90)
-    pwm.setServoPwm('1', 90)
+    pwm.setServoPwm('0', 130)
+    time.sleep(.2)
+    
+    pwm.PwmServo.setPWM(8, 0, 0)
+    pwm.PwmServo.setPWM(9, 0, 0)
+
+    for i in range(0, 360, 10):
+        pwm.setServoPwm('1', i)
+        time.sleep(.2)
+        print(i)
     pwm.PwmServo.setPWM(8, 0, 0)
     pwm.PwmServo.setPWM(9, 0, 0)
