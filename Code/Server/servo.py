@@ -41,4 +41,7 @@ if __name__ == '__main__':
             pwm.setServoPwm('1', 90)
         except KeyboardInterrupt:
             print("\nEnd of program")
+            pwm.setPWM('0', 0, 0)
+            pwm.setPWM('1', 0, 0)
+
             break
