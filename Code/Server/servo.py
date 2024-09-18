@@ -50,11 +50,16 @@ if __name__ == '__main__':
     time.sleep(.2)
     
     pwm.PwmServo.setPWM(8, 0, 0)
-    pwm.PwmServo.setPWM(9, 0, 0)
+    
 
-    for i in range(0, 360, 10):
-        pwm.setServoPwm('1', i)
-        time.sleep(.2)
-        print(i)
+    while True:
+        try:
+            for i in range(0, 360, 10):
+                pwm.setServoPwm('1', i)
+                time.sleep(.2)
+                print(i)
+        except KeyboardInterrupt:
+            print("\nEnd of program")
+            break
     pwm.PwmServo.setPWM(8, 0, 0)
     pwm.PwmServo.setPWM(9, 0, 0)
