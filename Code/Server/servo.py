@@ -28,38 +28,17 @@ class Servo:
             self.PwmServo.setServoPulse(15, 500 + int((angle + error) / 0.09))
 
 
-# # Main program logic follows:
-# if __name__ == '__main__':
-#     print("Now servos will rotate to 90°.")
-#     print("If they have already been at 90°, nothing will be observed.")
-#     print("Please keep the program running when installing the servos.")
-#     print("After that, you can press ctrl-C to end the program.")
-#     pwm = Servo()
-#     while True:
-#         try:
-#             pwm.setServoPwm('0', 90)
-#             pwm.setServoPwm('1', 90)
-#         except KeyboardInterrupt:
-#             print("\nEnd of program")
-#             break
-
-
+# Main program logic follows:
 if __name__ == '__main__':
+    print("Now servos will rotate to 90°.")
+    print("If they have already been at 90°, nothing will be observed.")
+    print("Please keep the program running when installing the servos.")
+    print("After that, you can press ctrl-C to end the program.")
     pwm = Servo()
-    pwm.setServoPwm('0', 130)
-    time.sleep(.2)
-    
-    pwm.PwmServo.setPWM(8, 0, 0)
-    
-
     while True:
         try:
-            for i in range(0, 360, 10):
-                pwm.setServoPwm('1', i)
-                time.sleep(.2)
-                print(i)
+            pwm.setServoPwm('0', 90)
+            pwm.setServoPwm('1', 90)
         except KeyboardInterrupt:
             print("\nEnd of program")
             break
-    pwm.PwmServo.setPWM(8, 0, 0)
-    pwm.PwmServo.setPWM(9, 0, 0)
