@@ -59,7 +59,7 @@ def run(model: str, max_results: int, score_threshold: float,
         COUNTER += 1
 
     # Initialize the object detection model with threading enabled
-    base_options = python.BaseOptions(model_asset_path=model, num_threads=2)  # Use multi-threading if supported
+    base_options = python.BaseOptions(model_asset_path=model)  # Use multi-threading if supported
     options = vision.ObjectDetectorOptions(base_options=base_options,
                                            running_mode=vision.RunningMode.LIVE_STREAM,
                                            max_results=max_results, score_threshold=score_threshold,
