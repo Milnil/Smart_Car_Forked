@@ -3,10 +3,15 @@ import matplotlib.pyplot as plt
 import math
 import time
 import logging
+import heapq
 from Motor import Motor
 from servo import Servo
 from Ultrasonic import Ultrasonic
 import RPi.GPIO as GPIO
+# Import for obstacle inflation
+from scipy.ndimage import binary_dilation
+# Placeholder import for TensorFlow model
+# from tensorflow_model import TensorFlowModel
 
 
 class ContinuousMappingAndNavigation:
@@ -30,6 +35,7 @@ class ContinuousMappingAndNavigation:
         self.position = np.array(initial_position, dtype=float)
         self.angle = initial_angle
         self.map = np.zeros(map_size)
+        self.inflated_map = np.zeros(map_size)  # Map with inflated obstacles
         self.max_sensor_range = 300  # Maximum range of ultrasonic sensor in cm
         self.goal = goal
 
@@ -41,6 +47,8 @@ class ContinuousMappingAndNavigation:
         self.motor = Motor()
         self.servo = Servo()
         self.ultrasonic = Ultrasonic()
+        # Placeholder for TensorFlow model
+        # self.tensorflow_model = TensorFlowModel()
 
         # Initialize GPIO for line tracking sensors
         GPIO.setmode(GPIO.BCM)
@@ -60,6 +68,9 @@ class ContinuousMappingAndNavigation:
             "0", 100
         )  # Assuming 90 is horizontal, 100 should be 10 degrees up
         time.sleep(0.5)  # Allow time for servo to move
+
+        # Map resolution (assuming 1 cm per cell)
+        self.map_resolution = 1  # cm per cell
 
         self.logger.info(
             "Initialization complete. Starting position: %s, Goal: %s",
@@ -132,7 +143,8 @@ class ContinuousMappingAndNavigation:
                 ix = int(self.position[0] + i * math.cos(rad_angle))
                 iy = int(self.position[1] + i * math.sin(rad_angle))
                 if 0 <= ix < self.map_size[0] and 0 <= iy < self.map_size[1]:
-                    self.map[iy, ix] = 0.2  # 0.2 indicates free space
+                    if self.map[iy, ix] == 0:
+                        self.map[iy, ix] = 0.2  # 0.2 indicates free space
 
         self.logger.debug("Map updated. Obstacle detected at (%s, %s)", x, y)
 
@@ -142,6 +154,16 @@ class ContinuousMappingAndNavigation:
         start_time = time.time()
 
         while time.time() - start_time < duration:
+            # Check for person detection
+            if self.is_person_detected():
+                self.logger.info("Person detected. Stopping until path is clear.")
+                self.motor.setMotorModel(0, 0, 0, 0)  # Stop motors
+                # Wait until person is no longer detected
+                while self.is_person_detected():
+                    time.sleep(0.1)
+                self.logger.info("Person no longer detected. Resuming movement.")
+                self.motor.setMotorModel(speed, speed, speed, speed)
+
             self.update_position()
             time.sleep(0.1)
 
@@ -186,7 +208,7 @@ class ContinuousMappingAndNavigation:
     def visualize_map(self):
         """Visualize the current map"""
         plt.figure(figsize=(10, 10))
-        plt.imshow(self.map, cmap="gray_r", interpolation="nearest")
+        plt.imshow(self.inflated_map, cmap="gray_r", interpolation="nearest")
         plt.colorbar(label="Occupancy (0: Unknown, 0.2: Free, 0.5: Car, 1: Occupied)")
         plt.plot(self.position[0], self.position[1], "ro", markersize=10)
         plt.plot(self.goal[0], self.goal[1], "go", markersize=10)
@@ -197,53 +219,123 @@ class ContinuousMappingAndNavigation:
         plt.close()
         self.logger.info("Map visualized and saved")
 
+    def inflate_obstacles(self):
+        """Inflate obstacles in the map to account for the car's size."""
+        # Define the structuring element for dilation (car's radius)
+        car_radius = int(math.ceil(math.hypot(self.car_length, self.car_width) / 2))
+        structuring_element_size = car_radius * 2 + 1  # Ensure it's odd
+        structuring_element = np.ones((structuring_element_size, structuring_element_size))
+
+        # Create a binary obstacle map
+        obstacle_map = self.map >= 0.5  # Obstacles are marked with value >= 0.5
+
+        # Inflate obstacles
+        inflated_obstacle_map = binary_dilation(obstacle_map, structure=structuring_element)
+
+        # Update the map with inflated obstacles
+        self.inflated_map = np.copy(self.map)
+        self.inflated_map[inflated_obstacle_map] = 1  # Set inflated obstacles to 1
+
+        self.logger.debug("Obstacles inflated to account for car size.")
+
+    def heuristic(self, a, b):
+        """Heuristic function for A* (Euclidean distance)."""
+        return math.hypot(a[0] - b[0], a[1] - b[1])
+
+    def reconstruct_path(self, came_from, current):
+        """Reconstruct the path from came_from map."""
+        total_path = [current]
+        while current in came_from:
+            current = came_from[current]
+            total_path.append(current)
+        total_path.reverse()
+        return total_path
+
+    def a_star_search(self, start, goal):
+        """Perform A* search to find the shortest path from start to goal."""
+        start = (int(start[0]), int(start[1]))
+        goal = (int(goal[0]), int(goal[1]))
+
+        # Define movement directions: up, down, left, right
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+        open_set = []
+        heapq.heappush(open_set, (0, start))
+        came_from = {}
+        g_score = {start: 0}
+        f_score = {start: self.heuristic(start, goal)}
+
+        while open_set:
+            current = heapq.heappop(open_set)[1]
+
+            if current == goal:
+                return self.reconstruct_path(came_from, current)
+
+            for direction in directions:
+                neighbor = (current[0] + direction[0], current[1] + direction[1])
+
+                if not (0 <= neighbor[0] < self.map_size[0] and 0 <= neighbor[1] < self.map_size[1]):
+                    continue  # Skip out-of-bounds positions
+
+                if self.inflated_map[neighbor[1], neighbor[0]] >= 0.5:
+                    continue  # Skip occupied or inflated cells
+
+                tentative_g_score = g_score[current] + 1  # Cost between adjacent nodes is 1
+
+                if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g_score
+                    f_score[neighbor] = tentative_g_score + self.heuristic(neighbor, goal)
+                    heapq.heappush(open_set, (f_score[neighbor], neighbor))
+
+        return None  # No path found
+
+    def is_person_detected(self):
+        """Check if a person is detected using TensorFlow object detection."""
+        # Placeholder implementation
+        # Replace with actual code that interfaces with TensorFlow model
+        # Example:
+        # image = self.capture_image()
+        # detections = self.tensorflow_model.detect(image)
+        # return any('person' in detection['class'] for detection in detections)
+
+        # For now, we return False to proceed
+        return False
+
     def get_best_move(self):
-        """Determine the best move based on current map and goal"""
-        goal_angle = (
-            math.degrees(
-                math.atan2(
-                    self.goal[1] - self.position[1], self.goal[0] - self.position[0]
-                )
-            )
-            % 360
-        )
-        angle_diff = (goal_angle - self.angle) % 360
+        """Determine the best move based on current map and goal using A* path planning."""
+        # Inflate obstacles
+        self.inflate_obstacles()
+
+        # Plan path using A*
+        path = self.a_star_search(self.position, self.goal)
+
+        if path is None or len(path) < 2:
+            self.logger.warning("No path found to the goal.")
+            return "rotate", 90  # Rotate to find a new path
+
+        # Get the next position in the path
+        next_position = path[1]  # path[0] is the current position
+
+        # Calculate the required angle to move towards next_position
+        dx = next_position[0] - self.position[0]
+        dy = next_position[1] - self.position[1]
+        target_angle = math.degrees(math.atan2(dy, dx)) % 360
+        angle_diff = (target_angle - self.angle + 360) % 360
         if angle_diff > 180:
             angle_diff -= 360
 
-        # Check if there's an obstacle in front
-        front_distance = self.get_ultrasonic_distance()
-        if front_distance < 30:
-            # If obstacle, choose between left and right turn
-            left_clear = (
-                self.map[int(self.position[1]), max(0, int(self.position[0] - 10))] != 1
+        if abs(angle_diff) > 5:
+            self.logger.info(
+                "Adjusting angle towards next path point by %.2f degrees.", angle_diff
             )
-            right_clear = (
-                self.map[
-                    int(self.position[1]),
-                    min(self.map_size[0] - 1, int(self.position[0] + 10)),
-                ]
-                != 1
-            )
-            if left_clear and (not right_clear or angle_diff < 0):
-                self.logger.info("Obstacle detected. Choosing to turn left.")
-                return "rotate", -45
-            else:
-                self.logger.info("Obstacle detected. Choosing to turn right.")
-                return "rotate", 45
+            return "rotate", angle_diff
         else:
-            # If no immediate obstacle, adjust angle towards goal
-            if abs(angle_diff) > 10:
-                self.logger.info(
-                    "Adjusting angle towards goal by %s degrees.", angle_diff
-                )
-                return "rotate", angle_diff
-            else:
-                move_distance = min(
-                    front_distance, 30
-                )  # Move forward, but not more than 30 cm at a time
-                self.logger.info("Moving forward by %s cm.", move_distance)
-                return "move", move_distance
+            # Calculate distance to next position
+            distance = math.hypot(dx, dy)
+            move_distance = min(distance, 30)  # Move up to 30 cm
+            self.logger.info("Moving forward by %.2f cm towards next path point.", move_distance)
+            return "move", move_distance
 
     def run_continuous_mapping_and_navigation(self, duration=300):
         """Continuously map the environment and navigate towards the goal"""
@@ -259,15 +351,6 @@ class ContinuousMappingAndNavigation:
             # Visualize current map
             self.visualize_map()
 
-            # Check if goal is reached
-            distance_to_goal = math.sqrt(
-                (self.position[0] - self.goal[0]) ** 2
-                + (self.position[1] - self.goal[1]) ** 2
-            )
-            if distance_to_goal < 10:  # Within 10 cm of goal
-                self.logger.info("Goal reached! Final position: %s", self.position)
-                break
-
             # Get best move
             action, value = self.get_best_move()
 
@@ -277,11 +360,22 @@ class ContinuousMappingAndNavigation:
             elif action == "move":
                 self.move(1000, value / 50)  # Adjust speed and time as needed
 
+            # After move, update distance to goal
+            distance_to_goal_x = abs(self.position[0] - self.goal[0])
+            distance_to_goal_y = abs(self.position[1] - self.goal[1])
+            distance_to_goal = math.hypot(distance_to_goal_x, distance_to_goal_y)
+
+            # Log current position and distance to goal
             self.logger.info(
-                "Current position: %s, Distance to goal: %s cm",
+                "Current position: %s, Distance to goal: %.2f cm",
                 self.position,
                 distance_to_goal,
             )
+
+            # Check if goal is reached (within 5x5 radius)
+            if distance_to_goal_x <= 5 and distance_to_goal_y <= 5:
+                self.logger.info("Goal reached! Final position: %s", self.position)
+                break
 
         self.logger.info(
             "Navigation completed. Total distance traveled: %.2f cm",
@@ -293,19 +387,17 @@ class ContinuousMappingAndNavigation:
         )
         self.logger.info("Number of detected obstacles: %d", np.sum(self.map == 1))
 
+    # Add any additional methods required for TensorFlow object detection
+    # def capture_image(self):
+    #     """Capture an image from the camera."""
+    #     # Implement camera capture logic
+    #     pass
 
-# Main execution
+    # Main execution
 if __name__ == "__main__":
     try:
         nav = ContinuousMappingAndNavigation()
         nav.run_continuous_mapping_and_navigation(duration=300)  # Run for 5 minutes
     except KeyboardInterrupt:
         nav.logger.warning("Process interrupted by user")
-    except Exception as e:
-        nav.logger.error("An error occurred: %s", str(e), exc_info=True)
-    finally:
-        # Clean up
-        GPIO.cleanup()
-        nav.motor.setMotorModel(0, 0, 0, 0)
-        nav.servo.setServoPwm("0", 90)
-        nav.logger.info("Navigation process ended. Cleanup complete.")
+    except Exception
