@@ -73,7 +73,7 @@ def run(model: str, max_results: int, score_threshold: float,
     im= picam2.capture_array()  
 #    success, image = cap.read()
     image=cv2.resize(im,(640,480))
-    image = cv2.flip(image, -1)
+    #image = cv2.flip(image, -1)
 
     # Convert the image from BGR to RGB as required by the TFLite model.
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)

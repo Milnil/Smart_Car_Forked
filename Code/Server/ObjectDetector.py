@@ -16,7 +16,7 @@ FONT_THICKNESS = 1
 TEXT_COLOR = (0, 0, 0)  # black
 
 class ObjectDetector:
-    def __init__(self, model_path='efficientdet_lite0.tflite', max_results=5, score_threshold=0.25, detection_confidence_threshold=0.6):
+    def __init__(self, model_path='efficientdet_lite0.tflite', max_results=5, score_threshold=0.25, detection_confidence_threshold=0.5):
         # Initialize model parameters
         self.model_path = model_path
         self.max_results = max_results
