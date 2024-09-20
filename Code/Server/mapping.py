@@ -1,34 +1,34 @@
-import time
-import RPi.GPIO as GPIO
-from Motor import Motor
-from Led import Led
-from rpi_ws281x import Color
 import numpy as np
 import matplotlib.pyplot as plt
 from math import sin, cos, radians
+import time
+from Motor import *
+from servo import *
+from Ultrasonic import *
+from PCA9685 import PCA9685
+import RPi.GPIO as GPIO
 
 
 class AdvancedMapping:
     def __init__(
         self, map_size=(200, 200), initial_position=(100, 100), initial_angle=0
     ):
-        # Initialize GPIO
-        GPIO.setwarnings(False)
-        GPIO.setmode(GPIO.BCM)
+        self.map_size = map_size
+        self.position = np.array(initial_position, dtype=float)
+        self.angle = initial_angle
+        self.map = np.zeros(map_size)
+        self.max_sensor_range = 300  # Maximum range of the ultrasonic sensor in cm
 
-        # Initialize components
+        # Initialize car components
         self.PWM = Motor()
-        self.led = Led()
+        self.pwm_S = Servo()
+        self.ultrasonic = Ultrasonic()
 
-        # Ultrasonic sensor pins
-        self.trigger_pin = 27
-        self.echo_pin = 22
-        self.MAX_DISTANCE = 300  # cm
-        self.timeOut = self.MAX_DISTANCE * 60
-        GPIO.setup(self.trigger_pin, GPIO.OUT)
-        GPIO.setup(self.echo_pin, GPIO.IN)
+        # Initialize GPIO
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
 
-        # Line tracking sensor pins
+        # Photo-interrupter pins for velocity sensing
         self.IR01 = 14
         self.IR02 = 15
         self.IR03 = 23
@@ -36,135 +36,82 @@ class AdvancedMapping:
         GPIO.setup(self.IR02, GPIO.IN)
         GPIO.setup(self.IR03, GPIO.IN)
 
-        # Mapping variables
-        self.map_size = map_size
-        self.position = np.array(initial_position, dtype=float)
-        self.angle = initial_angle
-        self.map = np.zeros(map_size)
+        self.last_time = time.time()
+        self.distance_traveled = 0
 
-    def pulseIn(self, pin, level, timeOut):
-        t0 = time.time()
-        while GPIO.input(pin) != level:
-            if (time.time() - t0) > timeOut * 0.000001:
-                return 0
-        t0 = time.time()
-        while GPIO.input(pin) == level:
-            if (time.time() - t0) > timeOut * 0.000001:
-                return 0
-        pulseTime = (time.time() - t0) * 1000000
-        return pulseTime
+    def get_ultrasonic_distance(self):
+        return self.ultrasonic.get_distance()
 
-    def get_distance(self):
-        distance_cm = [0, 0, 0, 0, 0]
-        for i in range(5):
-            GPIO.output(self.trigger_pin, GPIO.HIGH)
-            time.sleep(0.00001)
-            GPIO.output(self.trigger_pin, GPIO.LOW)
-            pingTime = self.pulseIn(self.echo_pin, GPIO.HIGH, self.timeOut)
-            distance_cm[i] = pingTime * 340.0 / 2.0 / 10000.0
-        distance_cm = sorted(distance_cm)
-        return int(distance_cm[2])
+    def rotate_servo(self, angle):
+        self.pwm_S.setServoPwm("0", angle)
+        time.sleep(0.1)  # Allow time for the servo to move
 
-    def read_line_sensors(self):
-        return (
-            (GPIO.input(self.IR01) << 2)
-            | (GPIO.input(self.IR02) << 1)
-            | GPIO.input(self.IR03)
-        )
-
-    def obstacle_avoidance(self):
-        print("Obstacle detected! Activating LEDs.")
-        self.led.colorWipe(self.led.strip, Color(255, 0, 0))  # Red color
-
-        front_distance = self.get_distance()
-        print(f"Front distance: {front_distance} cm")
-
-        # Turn left and measure
-        self.PWM.setMotorModel(-1500, -1500, 1500, 1500)
-        time.sleep(0.5)
-        self.PWM.setMotorModel(0, 0, 0, 0)
-        time.sleep(0.1)
-        left_distance = self.get_distance()
-        print(f"Left distance: {left_distance} cm")
-
-        # Turn right and measure
-        self.PWM.setMotorModel(1500, 1500, -1500, -1500)
-        time.sleep(1.0)
-        self.PWM.setMotorModel(0, 0, 0, 0)
-        time.sleep(0.1)
-        right_distance = self.get_distance()
-        print(f"Right distance: {right_distance} cm")
-
-        # Return to center
-        self.PWM.setMotorModel(-1500, -1500, 1500, 1500)
-        time.sleep(0.5)
-        self.PWM.setMotorModel(0, 0, 0, 0)
-        time.sleep(0.1)
-
-        # Choose direction
-        if left_distance > right_distance:
-            print("Turning left to avoid obstacle.")
-            self.PWM.setMotorModel(-1500, -1500, 1500, 1500)
-        else:
-            print("Turning right to avoid obstacle.")
-            self.PWM.setMotorModel(1500, 1500, -1500, -1500)
-
-        time.sleep(0.5)
-
-        # Move forward
-        print("Moving forward to bypass obstacle.")
-        self.PWM.setMotorModel(1000, 1000, 1000, 1000)
-        time.sleep(1)
-
-        # Check if obstacle is still present
-        self.PWM.setMotorModel(0, 0, 0, 0)
-        time.sleep(0.1)
-        if self.get_distance() < 30:
-            self.obstacle_avoidance()
-        else:
-            print("Obstacle avoided, deactivating LEDs, resuming mapping.")
-            self.led.colorWipe(self.led.strip, Color(0, 0, 0), 10)
+    def scan_environment(self):
+        for angle in range(
+            30, 151, 15
+        ):  # Scan from 30 to 150 degrees in 15-degree steps
+            self.rotate_servo(angle)
+            distance = self.get_ultrasonic_distance()
+            self.update_map(distance, angle)
 
     def update_map(self, distance, angle):
-        rad_angle = radians(self.angle + angle)
+        rad_angle = radians(self.angle + angle - 90)  # Adjust for car's orientation
         x = int(self.position[0] + distance * cos(rad_angle))
         y = int(self.position[1] + distance * sin(rad_angle))
 
         if 0 <= x < self.map_size[0] and 0 <= y < self.map_size[1]:
             self.map[y, x] = 1  # Mark as obstacle
 
+            # Mark cells along the line as free space
             for i in range(1, int(distance)):
                 ix = int(self.position[0] + i * cos(rad_angle))
                 iy = int(self.position[1] + i * sin(rad_angle))
                 if 0 <= ix < self.map_size[0] and 0 <= iy < self.map_size[1]:
-                    self.map[iy, ix] = 0.5  # Mark as free space
+                    self.map[iy, ix] = 0.5  # 0.5 indicates free space
 
-    def scan_environment(self):
-        for angle in range(-90, 91, 15):  # Scan from -90 to 90 degrees
-            self.PWM.setMotorModel(-1500, -1500, 1500, 1500)  # Rotate left
+    def move(self, speed, duration):
+        self.PWM.setMotorModel(speed, speed, speed, speed)
+        start_time = time.time()
+
+        while time.time() - start_time < duration:
+            # Update position based on velocity sensing
+            self.update_position()
             time.sleep(0.1)
-            self.PWM.setMotorModel(0, 0, 0, 0)
-            distance = self.get_distance()
-            self.update_map(distance, angle)
 
-    def line_tracking(self):
-        LMR = self.read_line_sensors()
-        if LMR == 2:  # Middle sensor detects line
-            self.PWM.setMotorModel(800, 800, 800, 800)
-        elif LMR == 4:  # Left sensor detects line
+        self.PWM.setMotorModel(0, 0, 0, 0)  # Stop motors
+
+    def update_position(self):
+        current_time = time.time()
+        dt = current_time - self.last_time
+
+        # Simple velocity estimation using photo-interrupters
+        left_speed = GPIO.input(self.IR01)
+        right_speed = GPIO.input(self.IR03)
+
+        avg_speed = (left_speed + right_speed) / 2
+        distance = avg_speed * dt * 10  # Adjust this factor based on your wheel size
+
+        self.distance_traveled += distance
+
+        # Update position
+        self.position[0] += distance * cos(radians(self.angle))
+        self.position[1] += distance * sin(radians(self.angle))
+
+        self.last_time = current_time
+
+    def rotate(self, angle):
+        # Implement rotation logic
+        if angle > 0:
             self.PWM.setMotorModel(-1500, -1500, 2000, 2000)
-        elif LMR == 6:  # Left and middle sensors detect line
-            self.PWM.setMotorModel(-2000, -2000, 4000, 4000)
-        elif LMR == 1:  # Right sensor detects line
-            self.PWM.setMotorModel(2000, 2000, -1500, -1500)
-        elif LMR == 3:  # Right and middle sensors detect line
-            self.PWM.setMotorModel(4000, 4000, -2000, -2000)
-        elif LMR == 7:  # All sensors detect line
-            self.PWM.setMotorModel(0, 0, 0, 0)
-        elif LMR == 0:  # No line detected
-            self.PWM.setMotorModel(800, 800, 800, 800)  # Proceed straight
         else:
-            self.PWM.setMotorModel(0, 0, 0, 0)
+            self.PWM.setMotorModel(2000, 2000, -1500, -1500)
+
+        ### TODO
+        time.sleep(abs(angle) / 90)  # Adjust this factor for accurate rotation
+        self.PWM.setMotorModel(0, 0, 0, 0)
+
+        self.angle += angle
+        self.angle %= 360
 
     def visualize_map(self):
         plt.figure(figsize=(10, 10))
@@ -180,44 +127,38 @@ class AdvancedMapping:
         start_time = time.time()
 
         while time.time() - start_time < duration:
-            distance = self.get_distance()
-            if distance < 30:
-                self.PWM.setMotorModel(0, 0, 0, 0)  # Stop before avoiding
-                self.obstacle_avoidance()
-            else:
-                self.scan_environment()
-                self.line_tracking()
+            self.scan_environment()
 
-            # Update position (simplified, assuming constant speed)
-            self.position[0] += (
-                cos(radians(self.angle)) * 5
-            )  # Adjust the constant as needed
-            self.position[1] += sin(radians(self.angle)) * 5
+            # Move forward if no obstacle
+            if self.get_ultrasonic_distance() > 30:
+                self.move(500, 1)  # Move forward for 1 second
+            else:
+                # Rotate to find clear path
+                self.rotate(45)
 
             # Periodically visualize the map
             if int(time.time() - start_time) % 10 == 0:
                 self.visualize_map()
 
         self.visualize_map()
-        print(f"Mapping completed.")
+        print(
+            f"Mapping completed. Total distance traveled: {self.distance_traveled:.2f} cm"
+        )
         print(
             f"Percentage of explored area: {np.sum(self.map > 0) / self.map.size * 100:.2f}%"
         )
         print(f"Number of detected obstacles: {np.sum(self.map == 1)}")
 
-    def cleanup(self):
-        self.PWM.setMotorModel(0, 0, 0, 0)
-        self.led.colorWipe(self.led.strip, Color(0, 0, 0), 10)
-        GPIO.cleanup()
 
-
-# Main program logic follows:
+# Main execution
 if __name__ == "__main__":
-    car = AdvancedMapping()
-    print("Program is starting ... ")
     try:
-        car.run_mapping(duration=120)  # Run mapping for 2 minutes
+        mapping = AdvancedMapping()
+        mapping.run_mapping(duration=120)  # Run mapping for 2 minutes
     except KeyboardInterrupt:
-        print("\nProgram interrupted by user.")
+        print("Mapping interrupted by user")
     finally:
-        car.cleanup()
+        # Clean up
+        GPIO.cleanup()
+        mapping.PWM.setMotorModel(0, 0, 0, 0)
+        mapping.pwm_S.setServoPwm("0", 90)
