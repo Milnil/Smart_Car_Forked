@@ -86,6 +86,8 @@ class ObjectDetector:
                         if category.category_name in ['stop sign', 'traffic light']:
                             print(f"Detected {category.category_name}")
                             self.detected_objects.add(category.category_name)
+                        else:
+                            print(f"Detected no key objects")
 
                 # Optional: Visualize detections
                 # Uncomment the following lines to display the detection window
