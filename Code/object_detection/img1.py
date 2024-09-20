@@ -1,21 +1,18 @@
-import cv2
 from picamera2 import Picamera2
-import time
 
+# Initialize the Picamera2
 picam2 = Picamera2()
-picam2.preview_configuration.main.size = (640,480)
-picam2.preview_configuration.main.format = "RGB888"
-picam2.preview_configuration.align()
-picam2.configure("preview")
+
+# Configure the camera (optional, based on your needs)
+picam2.configure("preview")  # You can adjust this based on your desired configuration
+
+# Start the camera
 picam2.start()
-cpt = 0
-maxFrames = 30
-while cpt < maxFrames:
-    im= picam2.capture_array()
-    im=cv2.flip(im,-1)
-    cv2.imshow("Camera", im)
-    cv2.imwrite('Smart_Car_Forked/Code/object_detection/images/stop_sign%d.jpg' %cpt, im)
-    cpt += 1
-    if cv2.waitKey(1)==ord('q'):
-        break
-cv2.destroyAllWindows()
+
+# Capture 30 images
+for i in range(30):
+    filename = f"images/image_{i}.jpg"  # Define the filename for each image
+    picam2.capture_file(filename)  # Capture and save the image
+
+# Stop the camera after capturing
+picam2.stop()

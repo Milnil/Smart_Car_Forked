@@ -103,7 +103,7 @@ def run(model: str, max_results: int, score_threshold: float,
       break
 
   detector.close()
-  cap.release()
+  #cap.release()
   cv2.destroyAllWindows()
 
 
