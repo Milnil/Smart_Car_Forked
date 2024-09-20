@@ -16,12 +16,12 @@ FONT_THICKNESS = 1
 TEXT_COLOR = (0, 0, 0)  # black
 
 class ObjectDetector:
-    def __init__(self, model_path='efficientdet_lite0.tflite', max_results=5, score_threshold=0.25):
+    def __init__(self, model_path='efficientdet_lite0.tflite', max_results=5, score_threshold=0.25, detection_confidence_threshold=0.6):
         # Initialize model parameters
         self.model_path = model_path
         self.max_results = max_results
         self.score_threshold = score_threshold
-
+        self.detection_confidence_threshold = detection_confidence_threshold  # Added parameter
         # Initialize FPS calculation variables
         self.COUNTER = 0
         self.FPS = 0
@@ -83,11 +83,15 @@ class ObjectDetector:
                 # Process detections to check for specific objects
                 for detection in current_result.detections:
                     for category in detection.categories:
-                        if category.category_name in ['stop sign', 'traffic light']:
-                            print(f"Detected {category.category_name}")
-                            self.detected_objects.add(category.category_name)
+                        # Check if the detection confidence is above the threshold
+                        if category.score >= self.detection_confidence_threshold:
+                            if category.category_name in ['stop sign', 'traffic light', 'person']:
+                                print(f"Detected {category.category_name} with confidence {category.score:.2f}")
+                                self.detected_objects.add(category.category_name)
                         else:
-                            print(f"Detected no key objects")
+                            # Optional: Print low-confidence detections for debugging
+                            print(f"Ignored {category.category_name} with low confidence {category.score:.2f}")
+
 
                 # Optional: Visualize detections
                 # Uncomment the following lines to display the detection window
