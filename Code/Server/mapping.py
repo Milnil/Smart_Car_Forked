@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import time
+import logging
 from Motor import Motor
 from servo import Servo
 from Ultrasonic import Ultrasonic
@@ -11,11 +12,19 @@ import RPi.GPIO as GPIO
 class ContinuousMappingAndNavigation:
     def __init__(
         self,
-        map_size=(100, 100),
-        initial_position=(50, 0),
+        map_size=(200, 200),
+        initial_position=(100, 10),
         initial_angle=90,
-        goal=(80, 80),
+        goal=(160, 160),
     ):
+        # Set up logging
+        logging.basicConfig(
+            filename="navigation.log",
+            level=logging.INFO,
+            format="%(asctime)s - %(levelname)s - %(message)s",
+        )
+        self.logger = logging.getLogger()
+
         # Initialize mapping parameters
         self.map_size = map_size
         self.position = np.array(initial_position, dtype=float)
@@ -23,6 +32,10 @@ class ContinuousMappingAndNavigation:
         self.map = np.zeros(map_size)
         self.max_sensor_range = 300  # Maximum range of ultrasonic sensor in cm
         self.goal = goal
+
+        # Car dimensions (in cm)
+        self.car_length = 25
+        self.car_width = 20
 
         # Initialize car components
         self.motor = Motor()
@@ -42,27 +55,72 @@ class ContinuousMappingAndNavigation:
         self.last_time = time.time()
         self.distance_traveled = 0
 
+        # Set initial servo position (10 degrees up)
+        self.servo.setServoPwm(
+            "0", 100
+        )  # Assuming 90 is horizontal, 100 should be 10 degrees up
+        time.sleep(0.5)  # Allow time for servo to move
+
+        self.logger.info(
+            "Initialization complete. Starting position: %s, Goal: %s",
+            self.position,
+            self.goal,
+        )
+
     def get_ultrasonic_distance(self):
         """Get distance reading from ultrasonic sensor"""
-        return self.ultrasonic.get_distance()
+        distance = self.ultrasonic.get_distance()
+        self.logger.debug("Ultrasonic distance reading: %s cm", distance)
+        return distance
 
     def rotate_servo(self, angle):
         """Rotate servo to specified angle"""
-        self.servo.setServoPwm("0", angle)
+        self.servo.setServoPwm("0", angle + 10)  # Add 10 to keep it slightly elevated
         time.sleep(0.1)  # Allow time for servo to move
+        self.logger.debug("Servo rotated to angle: %s", angle)
 
     def scan_environment(self):
-        """Perform a 120-degree scan of the environment"""
-        for angle in range(30, 151, 6):  # Scan from 30 to 150 degrees in 6-degree steps
+        """Perform a 150-degree scan of the environment"""
+        self.logger.info("Starting environment scan")
+        for angle in range(15, 166, 5):  # Scan from 15 to 165 degrees in 5-degree steps
             self.rotate_servo(angle)
             distance = self.get_ultrasonic_distance()
             self.update_map(distance, angle)
+        self.logger.info("Environment scan complete")
 
     def update_map(self, distance, angle):
-        """Update the map based on sensor reading"""
+        """Update the map based on sensor reading, considering car as a rectangle"""
         rad_angle = math.radians(
             self.angle + angle - 90
         )  # Adjust for car's orientation
+
+        # Calculate the four corners of the car
+        corners = [
+            (
+                self.position[0] - self.car_width / 2,
+                self.position[1] - self.car_length / 2,
+            ),
+            (
+                self.position[0] + self.car_width / 2,
+                self.position[1] - self.car_length / 2,
+            ),
+            (
+                self.position[0] - self.car_width / 2,
+                self.position[1] + self.car_length / 2,
+            ),
+            (
+                self.position[0] + self.car_width / 2,
+                self.position[1] + self.car_length / 2,
+            ),
+        ]
+
+        # Mark the car's position as occupied
+        for corner in corners:
+            x, y = int(corner[0]), int(corner[1])
+            if 0 <= x < self.map_size[0] and 0 <= y < self.map_size[1]:
+                self.map[y, x] = 0.5  # 0.5 indicates car's position
+
+        # Mark the detected obstacle
         x = int(self.position[0] + distance * math.cos(rad_angle))
         y = int(self.position[1] + distance * math.sin(rad_angle))
 
@@ -74,7 +132,9 @@ class ContinuousMappingAndNavigation:
                 ix = int(self.position[0] + i * math.cos(rad_angle))
                 iy = int(self.position[1] + i * math.sin(rad_angle))
                 if 0 <= ix < self.map_size[0] and 0 <= iy < self.map_size[1]:
-                    self.map[iy, ix] = 0.5  # 0.5 indicates free space
+                    self.map[iy, ix] = 0.2  # 0.2 indicates free space
+
+        self.logger.debug("Map updated. Obstacle detected at (%s, %s)", x, y)
 
     def move(self, speed, duration):
         """Move the car forward at specified speed for a duration"""
@@ -86,6 +146,7 @@ class ContinuousMappingAndNavigation:
             time.sleep(0.1)
 
         self.motor.setMotorModel(0, 0, 0, 0)  # Stop motors
+        self.logger.info("Moved for %s seconds at speed %s", duration, speed)
 
     def update_position(self):
         """Update the car's position based on line tracking sensors"""
@@ -106,6 +167,7 @@ class ContinuousMappingAndNavigation:
         self.position[1] += distance * math.sin(math.radians(self.angle))
 
         self.last_time = current_time
+        self.logger.debug("Position updated to: %s", self.position)
 
     def rotate(self, angle):
         """Rotate the car by the specified angle"""
@@ -119,20 +181,21 @@ class ContinuousMappingAndNavigation:
 
         self.angle += angle
         self.angle %= 360
+        self.logger.info("Rotated by %s degrees. New angle: %s", angle, self.angle)
 
     def visualize_map(self):
         """Visualize the current map"""
         plt.figure(figsize=(10, 10))
         plt.imshow(self.map, cmap="gray_r", interpolation="nearest")
-        plt.colorbar(label="Occupancy (0: Unknown, 0.5: Free, 1: Occupied)")
+        plt.colorbar(label="Occupancy (0: Unknown, 0.2: Free, 0.5: Car, 1: Occupied)")
         plt.plot(self.position[0], self.position[1], "ro", markersize=10)
         plt.plot(self.goal[0], self.goal[1], "go", markersize=10)
         plt.title("Environment Map")
         plt.xlabel("X coordinate (cm)")
         plt.ylabel("Y coordinate (cm)")
-        plt.show(block=False)
-        plt.pause(0.1)
+        plt.savefig(f"map_{time.time()}.png")
         plt.close()
+        self.logger.info("Map visualized and saved")
 
     def get_best_move(self):
         """Determine the best move based on current map and goal"""
@@ -163,21 +226,31 @@ class ContinuousMappingAndNavigation:
                 != 1
             )
             if left_clear and (not right_clear or angle_diff < 0):
+                self.logger.info("Obstacle detected. Choosing to turn left.")
                 return "rotate", -45
             else:
+                self.logger.info("Obstacle detected. Choosing to turn right.")
                 return "rotate", 45
         else:
             # If no immediate obstacle, adjust angle towards goal
             if abs(angle_diff) > 10:
+                self.logger.info(
+                    "Adjusting angle towards goal by %s degrees.", angle_diff
+                )
                 return "rotate", angle_diff
             else:
-                return "move", min(
+                move_distance = min(
                     front_distance, 30
                 )  # Move forward, but not more than 30 cm at a time
+                self.logger.info("Moving forward by %s cm.", move_distance)
+                return "move", move_distance
 
-    def run_continuous_mapping_and_navigation(self, duration=180):
+    def run_continuous_mapping_and_navigation(self, duration=300):
         """Continuously map the environment and navigate towards the goal"""
         start_time = time.time()
+        self.logger.info(
+            "Starting continuous mapping and navigation. Duration: %s seconds", duration
+        )
 
         while time.time() - start_time < duration:
             # Scan environment
@@ -187,14 +260,12 @@ class ContinuousMappingAndNavigation:
             self.visualize_map()
 
             # Check if goal is reached
-            if (
-                math.sqrt(
-                    (self.position[0] - self.goal[0]) ** 2
-                    + (self.position[1] - self.goal[1]) ** 2
-                )
-                < 5
-            ):
-                print("Goal reached!")
+            distance_to_goal = math.sqrt(
+                (self.position[0] - self.goal[0]) ** 2
+                + (self.position[1] - self.goal[1]) ** 2
+            )
+            if distance_to_goal < 10:  # Within 10 cm of goal
+                self.logger.info("Goal reached! Final position: %s", self.position)
                 break
 
             # Get best move
@@ -206,13 +277,21 @@ class ContinuousMappingAndNavigation:
             elif action == "move":
                 self.move(1000, value / 50)  # Adjust speed and time as needed
 
-        print(
-            f"Navigation completed. Total distance traveled: {self.distance_traveled:.2f} cm"
+            self.logger.info(
+                "Current position: %s, Distance to goal: %s cm",
+                self.position,
+                distance_to_goal,
+            )
+
+        self.logger.info(
+            "Navigation completed. Total distance traveled: %.2f cm",
+            self.distance_traveled,
         )
-        print(
-            f"Percentage of explored area: {np.sum(self.map > 0) / self.map.size * 100:.2f}%"
+        self.logger.info(
+            "Percentage of explored area: %.2f%%",
+            np.sum(self.map > 0) / self.map.size * 100,
         )
-        print(f"Number of detected obstacles: {np.sum(self.map == 1)}")
+        self.logger.info("Number of detected obstacles: %d", np.sum(self.map == 1))
 
 
 # Main execution
@@ -221,9 +300,12 @@ if __name__ == "__main__":
         nav = ContinuousMappingAndNavigation()
         nav.run_continuous_mapping_and_navigation(duration=300)  # Run for 5 minutes
     except KeyboardInterrupt:
-        print("Process interrupted by user")
+        nav.logger.warning("Process interrupted by user")
+    except Exception as e:
+        nav.logger.error("An error occurred: %s", str(e), exc_info=True)
     finally:
         # Clean up
         GPIO.cleanup()
         nav.motor.setMotorModel(0, 0, 0, 0)
         nav.servo.setServoPwm("0", 90)
+        nav.logger.info("Navigation process ended. Cleanup complete.")
