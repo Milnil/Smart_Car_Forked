@@ -8,20 +8,25 @@ from Ultrasonic import Ultrasonic
 import RPi.GPIO as GPIO
 
 
-class AdvancedMappingAndNavigation:
-    def __init__(self, map_size=(100, 100), initial_position=(50, 0), initial_angle=90):
+class ContinuousMappingAndNavigation:
+    def __init__(
+        self,
+        map_size=(100, 100),
+        initial_position=(50, 0),
+        initial_angle=90,
+        goal=(80, 80),
+    ):
         # Initialize mapping parameters
         self.map_size = map_size
         self.position = np.array(initial_position, dtype=float)
         self.angle = initial_angle
         self.map = np.zeros(map_size)
         self.max_sensor_range = 300  # Maximum range of ultrasonic sensor in cm
+        self.goal = goal
 
         # Initialize car components
         self.motor = Motor()
         self.servo = Servo()
-        self.servo.setServoPwm("1", 100)
-
         self.ultrasonic = Ultrasonic()
 
         # Initialize GPIO for line tracking sensors
@@ -121,100 +126,88 @@ class AdvancedMappingAndNavigation:
         plt.imshow(self.map, cmap="gray_r", interpolation="nearest")
         plt.colorbar(label="Occupancy (0: Unknown, 0.5: Free, 1: Occupied)")
         plt.plot(self.position[0], self.position[1], "ro", markersize=10)
+        plt.plot(self.goal[0], self.goal[1], "go", markersize=10)
         plt.title("Environment Map")
         plt.xlabel("X coordinate (cm)")
         plt.ylabel("Y coordinate (cm)")
-        plt.show()
+        plt.show(block=False)
+        plt.pause(0.1)
+        plt.close()
 
-    def find_path(self, goal):
-        """Find a path to the goal using a simple breadth-first search"""
-        queue = [(int(self.position[0]), int(self.position[1]))]
-        visited = set(queue)
-        parent = {}
+    def get_best_move(self):
+        """Determine the best move based on current map and goal"""
+        goal_angle = (
+            math.degrees(
+                math.atan2(
+                    self.goal[1] - self.position[1], self.goal[0] - self.position[0]
+                )
+            )
+            % 360
+        )
+        angle_diff = (goal_angle - self.angle) % 360
+        if angle_diff > 180:
+            angle_diff -= 360
 
-        while queue:
-            current = queue.pop(0)
-            if current == goal:
-                break
+        # Check if there's an obstacle in front
+        front_distance = self.get_ultrasonic_distance()
+        if front_distance < 30:
+            # If obstacle, choose between left and right turn
+            left_clear = (
+                self.map[int(self.position[1]), max(0, int(self.position[0] - 10))] != 1
+            )
+            right_clear = (
+                self.map[
+                    int(self.position[1]),
+                    min(self.map_size[0] - 1, int(self.position[0] + 10)),
+                ]
+                != 1
+            )
+            if left_clear and (not right_clear or angle_diff < 0):
+                return "rotate", -45
+            else:
+                return "rotate", 45
+        else:
+            # If no immediate obstacle, adjust angle towards goal
+            if abs(angle_diff) > 10:
+                return "rotate", angle_diff
+            else:
+                return "move", min(
+                    front_distance, 30
+                )  # Move forward, but not more than 30 cm at a time
 
-            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                next_pos = (current[0] + dx, current[1] + dy)
-                if (
-                    0 <= next_pos[0] < self.map_size[0]
-                    and 0 <= next_pos[1] < self.map_size[1]
-                    and self.map[next_pos[1], next_pos[0]] != 1
-                    and next_pos not in visited
-                ):
-                    queue.append(next_pos)
-                    visited.add(next_pos)
-                    parent[next_pos] = current
-
-        if goal not in parent:
-            return None
-
-        path = []
-        while goal != (int(self.position[0]), int(self.position[1])):
-            path.append(goal)
-            goal = parent[goal]
-        path.reverse()
-        return path
-
-    def navigate_to_goal(self, goal):
-        """Navigate to a goal position using the created map"""
-        path = self.find_path(goal)
-        if not path:
-            print("No path found to goal")
-            return
-
-        for next_pos in path:
-            # Calculate angle to next position
-            dx = next_pos[0] - self.position[0]
-            dy = next_pos[1] - self.position[1]
-            target_angle = math.degrees(math.atan2(dy, dx)) % 360
-
-            # Rotate to face the next position
-            angle_diff = (target_angle - self.angle) % 360
-            if angle_diff > 180:
-                angle_diff -= 360
-            self.rotate(angle_diff)
-
-            # Move to the next position
-            distance = math.sqrt(dx**2 + dy**2)
-            self.move(500, distance / 50)  # Adjust speed and time as needed
-
-            # Update position (in case move() didn't update it accurately)
-            self.position = np.array(next_pos, dtype=float)
-
-            # Scan environment after each move
-            self.scan_environment()
-
-    def run_mapping_and_navigation(self, duration=120):
-        """Run the mapping process and navigate to a goal"""
+    def run_continuous_mapping_and_navigation(self, duration=180):
+        """Continuously map the environment and navigate towards the goal"""
         start_time = time.time()
-        goal = (80, 80)  # Example goal position
 
         while time.time() - start_time < duration:
+            # Scan environment
             self.scan_environment()
 
-            # Try to navigate to the goal every 10 seconds
-            if int(time.time() - start_time) % 10 == 0:
-                print("Attempting to navigate to goal...")
-                self.navigate_to_goal(goal)
+            # Visualize current map
+            self.visualize_map()
 
-            # # Move forward if no obstacle
-            # if self.get_ultrasonic_distance() > 30:
-            #     self.move(1000, 0.5)  # Move forward for 0.5 seconds
-            # else:
-            #     # Rotate to find clear path
-            #     self.rotate(45)
+            # Check if goal is reached
+            if (
+                math.sqrt(
+                    (self.position[0] - self.goal[0]) ** 2
+                    + (self.position[1] - self.goal[1]) ** 2
+                )
+                < 5
+            ):
+                print("Goal reached!")
+                break
 
-            # Periodically visualize the map
-            if int(time.time() - start_time) % 30 == 0:
-                self.visualize_map()
+            # Get best move
+            action, value = self.get_best_move()
 
-        self.visualize_map()
+            # Execute move
+            if action == "rotate":
+                self.rotate(value)
+            elif action == "move":
+                self.move(1000, value / 50)  # Adjust speed and time as needed
+
         print(
-            f"Mapping and navigation completed. Total distance traveled: {self.distance_traveled:.2f} cm"
+            f"Navigation completed. Total distance traveled: {self.distance_traveled:.2f} cm"
         )
         print(
             f"Percentage of explored area: {np.sum(self.map > 0) / self.map.size * 100:.2f}%"
@@ -225,14 +218,12 @@ class AdvancedMappingAndNavigation:
 # Main execution
 if __name__ == "__main__":
     try:
-        mapping_and_navigation = AdvancedMappingAndNavigation()
-        mapping_and_navigation.run_mapping_and_navigation(
-            duration=180
-        )  # Run for 3 minutes
+        nav = ContinuousMappingAndNavigation()
+        nav.run_continuous_mapping_and_navigation(duration=300)  # Run for 5 minutes
     except KeyboardInterrupt:
         print("Process interrupted by user")
     finally:
         # Clean up
         GPIO.cleanup()
-        mapping_and_navigation.motor.setMotorModel(0, 0, 0, 0)
-        mapping_and_navigation.servo.setServoPwm("0", 90)
+        nav.motor.setMotorModel(0, 0, 0, 0)
+        nav.servo.setServoPwm("0", 90)
