@@ -20,6 +20,8 @@ class AdvancedMappingAndNavigation:
         # Initialize car components
         self.motor = Motor()
         self.servo = Servo()
+        self.servo.setServoPwm("1", 100)
+
         self.ultrasonic = Ultrasonic()
 
         # Initialize GPIO for line tracking sensors
