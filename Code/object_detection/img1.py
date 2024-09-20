@@ -11,7 +11,7 @@ picam2.start()
 
 # Capture 30 images
 for i in range(30):
-    filename = f"images/image_{i}.jpg"  # Define the filename for each image
+    filename = f"images/human_{i}.jpg"  # Define the filename for each image
     picam2.capture_file(filename)  # Capture and save the image
 
 # Stop the camera after capturing
