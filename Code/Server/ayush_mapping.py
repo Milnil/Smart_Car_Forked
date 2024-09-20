@@ -11,9 +11,9 @@ class ContinuousMappingAndNavigation:
     def __init__(
         self,
         map_size=(100, 100),
-        initial_position=(50, 0),
+        initial_position=(0, 50),
         initial_angle=90,
-        goal=(80, 0),
+        goal=(20, 50),
     ):
         self.map_size = map_size
         self.position = np.array(initial_position, dtype=float)
@@ -32,7 +32,7 @@ class ContinuousMappingAndNavigation:
         return self.ultrasonic.get_distance()
 
     def rotate_servo(self, angle, axis=0):
-        self.servo.setServoPwm(axis, angle)
+        self.servo.setServoPwm(str(axis), angle)
         time.sleep(0.1)  # Allow time for servo to move
 
     def scan_environment(self):
@@ -58,7 +58,8 @@ class ContinuousMappingAndNavigation:
                 ix = int(self.position[0] + i * math.cos(rad_angle))
                 iy = int(self.position[1] + i * math.sin(rad_angle))
                 if 0 <= ix < self.map_size[0] and 0 <= iy < self.map_size[1]:
-                    self.map[iy, ix] = 0  # 0 indicates free space
+                    self.map[iy, ix] = 0  
+                    # 0 indicates free space
 
     def move(self, speed, duration):
         self.motor.setMotorModel(speed, speed, speed, speed)
@@ -138,7 +139,7 @@ class ContinuousMappingAndNavigation:
         plt.plot(self.goal[0], self.goal[1], "g*", markersize=10)
 
         # Save the figure
-        plt.savefig(f'map_{time.strftime("%Y%m%d_%H%M%S")}.png')
+        plt.savefig(f'maps/map_{time.strftime("%m%d_%H%M%S")}.png')
         plt.close()
 
     def run_continuous_mapping_and_navigation(self, duration=300):
@@ -147,10 +148,8 @@ class ContinuousMappingAndNavigation:
             # Scan environment
             self.scan_environment()
 
-            # Visualize map every 10 seconds
-            if time.time() - self.last_map_time > 10:
-                self.visualize_map()
-                self.last_map_time = time.time()
+            self.visualize_map()
+            self.last_map_time = time.time()
 
             # Get best move
             action, value = self.find_best_move()

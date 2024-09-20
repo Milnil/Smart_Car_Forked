@@ -17,10 +17,10 @@ from scipy.ndimage import binary_dilation
 class ContinuousMappingAndNavigation:
     def __init__(
         self,
-        map_size=(200, 200),
-        initial_position=(100, 10),
+        map_size=(100, 100),
+        initial_position=(50, 0),
         initial_angle=90,
-        goal=(160, 160),
+        goal=(80, 0),
     ):
         # Set up logging
         logging.basicConfig(
@@ -35,7 +35,6 @@ class ContinuousMappingAndNavigation:
         self.position = np.array(initial_position, dtype=float)
         self.angle = initial_angle
         self.map = np.zeros(map_size)
-        self.inflated_map = np.zeros(map_size)  # Map with inflated obstacles
         self.max_sensor_range = 300  # Maximum range of ultrasonic sensor in cm
         self.goal = goal
 
@@ -47,6 +46,7 @@ class ContinuousMappingAndNavigation:
         self.motor = Motor()
         self.servo = Servo()
         self.ultrasonic = Ultrasonic()
+        
         # Placeholder for TensorFlow model
         # self.tensorflow_model = TensorFlowModel()
 
@@ -93,10 +93,12 @@ class ContinuousMappingAndNavigation:
     def scan_environment(self):
         """Perform a 150-degree scan of the environment"""
         self.logger.info("Starting environment scan")
-        for angle in range(15, 166, 5):  # Scan from 15 to 165 degrees in 5-degree steps
+        self.servo.setServoPwm("1",110)
+        for angle in range(30, 150, 10):  # Scan from 15 to 165 degrees in 5-degree steps
             self.rotate_servo(angle)
             distance = self.get_ultrasonic_distance()
             self.update_map(distance, angle)
+            print(distance)
         self.logger.info("Environment scan complete")
 
     def update_map(self, distance, angle):
@@ -205,39 +207,28 @@ class ContinuousMappingAndNavigation:
         self.angle %= 360
         self.logger.info("Rotated by %s degrees. New angle: %s", angle, self.angle)
 
+        def is_collision(self, node):
+                x,y = node
+                x = int(x)
+                y = int(y)
+                
+
+
     def visualize_map(self):
         """Visualize the current map"""
         plt.figure(figsize=(10, 10))
-        plt.imshow(self.inflated_map, cmap="gray_r", interpolation="nearest")
+        plt.imshow(self.map, cmap="gray_r", interpolation="nearest")
         plt.colorbar(label="Occupancy (0: Unknown, 0.2: Free, 0.5: Car, 1: Occupied)")
         plt.plot(self.position[0], self.position[1], "ro", markersize=10)
         plt.plot(self.goal[0], self.goal[1], "go", markersize=10)
         plt.title("Environment Map")
         plt.xlabel("X coordinate (cm)")
         plt.ylabel("Y coordinate (cm)")
-        plt.savefig(f"map_{time.time()}.png")
+        plt.savefig(f"maps/map_{time.time()}.png")
         plt.close()
         self.logger.info("Map visualized and saved")
 
-    def inflate_obstacles(self):
-        """Inflate obstacles in the map to account for the car's size."""
-        # Define the structuring element for dilation (car's radius)
-        car_radius = int(math.ceil(math.hypot(self.car_length, self.car_width) / 2))
-        structuring_element_size = car_radius * 2 + 1  # Ensure it's odd
-        structuring_element = np.ones((structuring_element_size, structuring_element_size))
-
-        # Create a binary obstacle map
-        obstacle_map = self.map >= 0.5  # Obstacles are marked with value >= 0.5
-
-        # Inflate obstacles
-        inflated_obstacle_map = binary_dilation(obstacle_map, structure=structuring_element)
-
-        # Update the map with inflated obstacles
-        self.inflated_map = np.copy(self.map)
-        self.inflated_map[inflated_obstacle_map] = 1  # Set inflated obstacles to 1
-
-        self.logger.debug("Obstacles inflated to account for car size.")
-
+    
     def heuristic(self, a, b):
         """Heuristic function for A* (Euclidean distance)."""
         return math.hypot(a[0] - b[0], a[1] - b[1])
@@ -305,7 +296,6 @@ class ContinuousMappingAndNavigation:
     def get_best_move(self):
         """Determine the best move based on current map and goal using A* path planning."""
         # Inflate obstacles
-        self.inflate_obstacles()
 
         # Plan path using A*
         path = self.a_star_search(self.position, self.goal)
@@ -400,4 +390,10 @@ if __name__ == "__main__":
         nav.run_continuous_mapping_and_navigation(duration=300)  # Run for 5 minutes
     except KeyboardInterrupt:
         nav.logger.warning("Process interrupted by user")
-    except Exception
+    except Exception as e:
+        nav.logger.error("An error occurred: %s", str(e), exc_info=True)
+    finally:
+        GPIO.cleanup()
+        nav.motor.setMotorModel(0,0,0,0)
+        nav.servo.setServoPwm("0",90)
+        nav.logger.info("Navigation process ended. Cleanup complete.")
