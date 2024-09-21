@@ -192,8 +192,14 @@ class Mapping:
         scan_angles = range(30, 151, 6)  # Scan from 30 to 150 degrees in 6-degree steps
         scan_results = {}
 
+        self.servo.setServoPwm("0", 90)
+        time.sleep(0.1)
+        distance = self.ultrasonic.get_distance()
+        print(f"Scan at initial angle 90: Distance {distance} cm")
+
         for angle in scan_angles:
             self.servo.setServoPwm("0", angle)
+            time.sleep(0.2)
             distance = self.ultrasonic.get_distance()
             print(f"Scan at angle {angle}: Distance {distance} cm")
             scan_results[angle] = distance
