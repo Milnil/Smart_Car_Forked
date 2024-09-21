@@ -238,14 +238,24 @@ class Mapping:
 
     def visualize_map(self, map, title="Map Visualization", path=None):
         plt.figure(figsize=(10, 10))
-        cmap = plt.cm.colors.ListedColormap(["white", "red"])
-        bounds = [-0.5, 0.5, 1.5, 2.5]
-        norm = plt.cm.colors.BoundaryNorm(bounds, cmap.N)
 
-        plt.imshow(map, cmap=cmap, norm=norm, interpolation="nearest")
+        # Create a base map with empty cells (white) and detected obstacles (red)
+        plt.imshow(
+            map,
+            cmap=plt.cm.colors.ListedColormap(["white", "red"]),
+            interpolation="nearest",
+        )
+
+        # Overlay true obstacles in gray
+        true_obstacle_mask = self.true_map == 1
+        plt.imshow(
+            true_obstacle_mask,
+            cmap=plt.cm.colors.ListedColormap(["none", "gray"]),
+            alpha=0.5,
+            interpolation="nearest",
+        )
+
         plt.title(title)
-        cbar = plt.colorbar(ticks=[0, 1], label="Cell Type")
-        cbar.set_ticklabels(["Empty", "Detected Obstacle"])
 
         # Plot car position and orientation
         car_x, car_y = self.car_position
@@ -275,12 +285,29 @@ class Mapping:
             path_x, path_y = zip(*path)
             plt.plot(path_x, path_y, color="blue", linewidth=2, linestyle="--")
 
+        # Add legend
+        legend_elements = [
+            plt.Rectangle(
+                (0, 0), 1, 1, facecolor="white", edgecolor="black", label="Empty"
+            ),
+            plt.Rectangle((0, 0), 1, 1, facecolor="red", label="Detected Obstacle"),
+            plt.Rectangle(
+                (0, 0), 1, 1, facecolor="gray", alpha=0.5, label="True Obstacle"
+            ),
+            plt.Line2D(
+                [0], [0], color="blue", lw=2, linestyle="--", label="Planned Path"
+            ),
+            plt.Rectangle((0, 0), 1, 1, facecolor="blue", label="Car"),
+            plt.plot([], [], "g*", markersize=15, label="Goal")[0],
+        ]
+        plt.legend(handles=legend_elements, loc="upper left", bbox_to_anchor=(1, 1))
+
         plt.tight_layout()
 
         # Save the figure instead of showing it
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{self.output_folder}/map_{timestamp}.png"
-        plt.savefig(filename)
+        plt.savefig(filename, bbox_inches="tight")
         plt.close()
         print(f"Map saved as {filename}")
 
