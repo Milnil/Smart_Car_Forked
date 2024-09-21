@@ -9,23 +9,19 @@ import shutil
 
 
 class Mapping:
-    def __init__(self, map_size=200, resolution=1):
+    def __init__(self, map_size=100, resolution=1):
         self.map_size = map_size
         self.resolution = resolution
-        self.true_map = np.zeros(
-            (map_size, map_size), dtype=int
-        )  # The true map with all obstacles
-        self.known_map = np.zeros(
-            (map_size, map_size), dtype=int
-        )  # The map known to the car
-        self.car_width = 25  # cm
-        self.car_height = 20  # cm
+        self.true_map = np.zeros((map_size, map_size), dtype=int)
+        self.known_map = np.zeros((map_size, map_size), dtype=int)
+        self.car_width = 20
+        self.car_height = 25
         self.car_position = (map_size // 2, self.car_height // 2)
         self.car_orientation = 90  # 90 degrees is facing up (north)
         self.servo_angle = 90  # Initialize servo angle
-        self.goal = (map_size - 50, map_size - 50)  # Static goal
+        self.goal = (map_size - 25, map_size - 25)
         self.update_interval = 5  # Update map every 5 steps
-        self.additional_padding = 5  # 5 cm additional padding
+        self.additional_padding = 5
 
         # Create output folder for visualizations
         self.output_folder = "mappings/Routing"
@@ -44,19 +40,17 @@ class Mapping:
     def create_mock_environment(self):
         # Create static obstacles in the true map
         obstacles = [
-            (50, 50, 40, 40),
-            (120, 100, 20, 20),
+            (60, 40, 10, 10),
+            (40, 60, 20, 10),
         ]
         for obstacle in obstacles:
             self.add_rectangle_obstacle(*obstacle)
 
     def add_rectangle_obstacle(self, x, y, width, height):
-        # Add obstacle with clearance to the true map
-        clearance = max(self.car_width, self.car_height) // 2 + self.additional_padding
-        x_start = max(0, x - clearance)
-        y_start = max(0, y - clearance)
-        x_end = min(self.map_size, x + width + clearance)
-        y_end = min(self.map_size, y + height + clearance)
+        x_start = max(0, x)
+        y_start = max(0, y)
+        x_end = min(self.map_size, x + width)
+        y_end = min(self.map_size, y + height)
         self.true_map[y_start:y_end, x_start:x_end] = 1
 
     def heuristic(self, a, b):
@@ -260,8 +254,8 @@ class Mapping:
         # Plot car position and orientation
         car_x, car_y = self.car_position
         car_angle = math.radians(self.car_orientation)
-        dx = 15 * math.cos(car_angle)
-        dy = 15 * math.sin(car_angle)
+        dx = 7 * math.cos(car_angle)  # Reduced from 15 to 7
+        dy = 7 * math.sin(car_angle)  # Reduced from 15 to 7
 
         car_rect = plt.Rectangle(
             (car_x - self.car_width // 2, car_y - self.car_height // 2),
@@ -273,17 +267,19 @@ class Mapping:
         )
         plt.gca().add_patch(car_rect)
         plt.arrow(
-            car_x, car_y, dx, dy, head_width=5, head_length=10, fc="blue", ec="blue"
+            car_x, car_y, dx, dy, head_width=2, head_length=4, fc="blue", ec="blue"
         )
 
         # Plot goal position
         goal_x, goal_y = self.goal
-        plt.plot(goal_x, goal_y, "g*", markersize=15)
+        plt.plot(
+            goal_x, goal_y, "g*", markersize=10
+        )  # Reduced markersize from 15 to 10
 
         # Plot path if provided
         if path:
             path_x, path_y = zip(*path)
-            plt.plot(path_x, path_y, color="blue", linewidth=2, linestyle="--")
+            plt.plot(path_x, path_y, color="blue", linewidth=1, linestyle="--")
 
         # Add legend
         legend_elements = [
@@ -295,10 +291,10 @@ class Mapping:
                 (0, 0), 1, 1, facecolor="gray", alpha=0.5, label="True Obstacle"
             ),
             plt.Line2D(
-                [0], [0], color="blue", lw=2, linestyle="--", label="Planned Path"
+                [0], [0], color="blue", lw=1, linestyle="--", label="Planned Path"
             ),
             plt.Rectangle((0, 0), 1, 1, facecolor="blue", label="Car"),
-            plt.plot([], [], "g*", markersize=15, label="Goal")[0],
+            plt.plot([], [], "g*", markersize=10, label="Goal")[0],
         ]
         plt.legend(handles=legend_elements, loc="upper left", bbox_to_anchor=(1, 1))
 
