@@ -127,15 +127,63 @@ class Mapping:
             print(f"Cannot move to {new_position}, obstacle detected or out of bounds.")
             return False
 
-        # Update car orientation based on movement
+        # Calculate the desired movement
         dx = new_position[0] - self.car_position[0]
         dy = new_position[1] - self.car_position[1]
-        if dx != 0 or dy != 0:
-            self.car_orientation = math.degrees(math.atan2(dy, dx))
 
+        # Calculate the angle to the new position
+        target_angle = math.degrees(math.atan2(dy, dx))
+
+        # Calculate the difference between current orientation and target angle
+        angle_diff = (target_angle - self.car_orientation + 180) % 360 - 180
+
+        # Rotate the car if necessary
+        if abs(angle_diff) > 10:  # Threshold for rotation
+            if angle_diff > 0:
+                self.PWM.setMotorModel(1000, 1000, -1000, -1000)  # Rotate right
+            else:
+                self.PWM.setMotorModel(-1000, -1000, 1000, 1000)  # Rotate left
+            time.sleep(
+                abs(angle_diff) / 90
+            )  # Adjust sleep time based on angle difference
+            self.PWM.setMotorModel(0, 0, 0, 0)  # Stop rotation
+            self.car_orientation = target_angle
+
+        # Move forward
+        distance = math.sqrt(dx**2 + dy**2)
+        self.PWM.setMotorModel(600, 600, 600, 600)
+        time.sleep(distance * 0.1)  # Adjust this factor based on your car's speed
+        self.PWM.setMotorModel(0, 0, 0, 0)  # Stop movement
+
+        # Update car position (this is an estimate, you might need to refine this)
         self.car_position = new_position
-        print(f"Car moved to {new_position}")
+        print(f"Car moved to approximately {new_position}")
+
+        # Perform a quick scan to check for obstacles
+        L = self.get_distance_at_angle(30)
+        M = self.get_distance_at_angle(90)
+        R = self.get_distance_at_angle(150)
+
+        # Adjust position if obstacles are detected
+        if M < 30 or (L < 30 and R < 30):
+            print("Obstacle detected, adjusting position")
+            self.PWM.setMotorModel(-600, -600, -600, -600)
+            time.sleep(0.5)
+            self.PWM.setMotorModel(0, 0, 0, 0)
+            # Update position estimate (moving slightly backwards)
+            self.car_position = (
+                self.car_position[0]
+                - int(5 * math.cos(math.radians(self.car_orientation))),
+                self.car_position[1]
+                - int(5 * math.sin(math.radians(self.car_orientation))),
+            )
+
         return True
+
+    def get_distance_at_angle(self, angle):
+        self.servo.setServoPwm("0", angle)
+        time.sleep(0.1)
+        return self.ultrasonic.get_distance()
 
     def update_map_during_movement(self):
         print("Updating map during movement...")
