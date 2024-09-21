@@ -6,6 +6,9 @@ from queue import PriorityQueue
 import os
 from datetime import datetime
 import shutil
+from Motor import *
+from Ultrasonic import *
+from servo import *
 
 
 class Mapping:
@@ -29,13 +32,13 @@ class Mapping:
             shutil.rmtree(self.output_folder)
         os.makedirs(self.output_folder)
 
-        # Create mock environment with some obstacles
-        self.create_mock_environment()
+        # # Create mock environment with some obstacles
+        # self.create_mock_environment()
 
         # Initialize mock components
-        self.ultrasonic = MockUltrasonic(self)
-        self.servo = MockServo(self)
-        self.motor = MockMotor()
+        self.ultrasonic = Ultrasonic()
+        self.servo = Servo()
+        self.motor = Motor()
 
     def create_mock_environment(self):
         # Create static obstacles in the true map
