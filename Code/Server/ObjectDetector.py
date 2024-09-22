@@ -15,13 +15,22 @@ FONT_SIZE = 1
 FONT_THICKNESS = 1
 TEXT_COLOR = (0, 0, 0)  # black
 
+
 class ObjectDetector:
-    def __init__(self, model_path='efficientdet_lite0.tflite', max_results=5, score_threshold=0.25, detection_confidence_threshold=0.5):
+    def __init__(
+        self,
+        model_path="efficientdet_lite0.tflite",
+        max_results=5,
+        score_threshold=0.25,
+        detection_confidence_threshold=0.5,
+    ):
         # Initialize model parameters
         self.model_path = model_path
         self.max_results = max_results
         self.score_threshold = score_threshold
-        self.detection_confidence_threshold = detection_confidence_threshold  # Added parameter
+        self.detection_confidence_threshold = (
+            detection_confidence_threshold  # Added parameter
+        )
         # Initialize FPS calculation variables
         self.COUNTER = 0
         self.FPS = 0
@@ -47,11 +56,16 @@ class ObjectDetector:
             running_mode=vision.RunningMode.LIVE_STREAM,
             max_results=self.max_results,
             score_threshold=self.score_threshold,
-            result_callback=self.save_result
+            result_callback=self.save_result,
         )
         self.detector = vision.ObjectDetector.create_from_options(options)
 
-    def save_result(self, result: vision.ObjectDetectorResult, unused_output_image: mp.Image, timestamp_ms: int):
+    def save_result(
+        self,
+        result: vision.ObjectDetectorResult,
+        unused_output_image: mp.Image,
+        timestamp_ms: int,
+    ):
         # Calculate the FPS
         if self.COUNTER % self.fps_avg_frame_count == 0:
             self.FPS = self.fps_avg_frame_count / (time.time() - self.START_TIME)
@@ -85,13 +99,20 @@ class ObjectDetector:
                     for category in detection.categories:
                         # Check if the detection confidence is above the threshold
                         if category.score >= self.detection_confidence_threshold:
-                            if category.category_name in ['stop sign', 'traffic light', 'person']:
-                                print(f"Detected {category.category_name} with confidence {category.score:.2f}")
+                            if category.category_name in [
+                                "stop sign",
+                                "traffic light",
+                                "person",
+                            ]:
+                                print(
+                                    f"Detected {category.category_name} with confidence {category.score:.2f}"
+                                )
                                 self.detected_objects.add(category.category_name)
                         else:
                             # Optional: Print low-confidence detections for debugging
-                            print(f"Ignored {category.category_name} with low confidence {category.score:.2f}")
-
+                            print(
+                                f"Ignored {category.category_name} with low confidence {category.score:.2f}"
+                            )
 
                 # Optional: Visualize detections
                 # Uncomment the following lines to display the detection window
@@ -109,14 +130,8 @@ class ObjectDetector:
 
         # Return the detected objects
         return self.detected_objects
-    
-    
 
-
-    def visualize(
-        image,
-        detection_result
-    ) -> np.ndarray:
+    def visualize(image, detection_result) -> np.ndarray:
         """Draws bounding boxes on the input image and return it.
         Args:
             image: The input RGB image.
@@ -136,11 +151,18 @@ class ObjectDetector:
             category = detection.categories[0]
             category_name = category.category_name
             probability = round(category.score, 2)
-            result_text = category_name + ' (' + str(probability) + ')'
-            text_location = (MARGIN + bbox.origin_x,
-                            MARGIN + ROW_SIZE + bbox.origin_y)
-            cv2.putText(image, result_text, text_location, cv2.FONT_HERSHEY_DUPLEX,
-                        FONT_SIZE, TEXT_COLOR, FONT_THICKNESS, cv2.LINE_AA)
+            result_text = category_name + " (" + str(probability) + ")"
+            text_location = (MARGIN + bbox.origin_x, MARGIN + ROW_SIZE + bbox.origin_y)
+            cv2.putText(
+                image,
+                result_text,
+                text_location,
+                cv2.FONT_HERSHEY_DUPLEX,
+                FONT_SIZE,
+                TEXT_COLOR,
+                FONT_THICKNESS,
+                cv2.LINE_AA,
+            )
 
         return image
 
@@ -149,8 +171,9 @@ class ObjectDetector:
         self.picam2.stop()
         # Any other cleanup actions
 
+
 # Example usage:
-if __name__ == '__main__':
+if __name__ == "__main__":
     detector = ObjectDetector()
     detected = detector.detect_objects(5)  # Run detection for 5 seconds
     print("Detected objects:", detected)
