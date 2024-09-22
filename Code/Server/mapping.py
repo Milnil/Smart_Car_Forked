@@ -26,7 +26,7 @@ class Mapping:
         self.goal = (250, 250) # (horizontal), (vertical)
         self.update_interval = 10  # Update map every 5 steps
         self.additional_padding = 5
-        self.detector = ObjectDetector(detection_confidence_threshold=.25)
+        self.detector = ObjectDetector(detection_confidence_threshold=.8)
 
         # Create output folder for visualizations
         self.output_folder = "mappings/Routing"
@@ -144,7 +144,6 @@ class Mapping:
             print(f"Cannot move to {new_position}, obstacle detected or out of bounds.")
             return False
 
-        # TODO: make sure the car doesn't rotate and move forward in the same call
         
         
         # Calculate the desired movement
@@ -159,7 +158,6 @@ class Mapping:
         
         
         # Rotate the car if necessary
-        # TODO: fix the left turn
         if abs(angle_diff) > 10:  # Threshold for rotation
             if angle_diff > 0:
                 print("rotating right")
@@ -177,7 +175,6 @@ class Mapping:
             self.car_orientation = target_angle
         else: 
             if "stop sign" or "traffic light" in self.detector.detect_objects(1):
-                    print("Obeying traffic laws :)")
                     time.sleep(5)
                     print("Done")
         
