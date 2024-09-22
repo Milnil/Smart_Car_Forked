@@ -22,7 +22,7 @@ class Mapping:
         self.car_position = (map_size // 2, self.car_height // 2)
         self.car_orientation = 90  # 90 degrees is facing up (north)
         self.servo_angle = 90  # Initialize servo angle
-        self.goal = (map_size - 25, map_size - 25)
+        self.goal = (map_size - 25, map_size - 50) # x, y
         self.update_interval = 5  # Update map every 5 steps
         self.additional_padding = 5
 
@@ -88,6 +88,21 @@ class Mapping:
                     return False
         return True
 
+
+    def validate_distance(angle, scan_results, scan_angles):
+        nearby_distances = []
+        
+        for offset in range(-2,3):
+            nearby_angle = angle + offset
+            if nearby_angle in scan_angles and scan_results[nearby_angle] > 0:
+                nearby_distances.append(scan_results[nearby_angle])
+        if nearby_distances:
+                return sum(nearby_distances) / len(nearby_distances)
+        else:
+                return None
+
+
+
     def a_star_search(self, start, goal):
         frontier = PriorityQueue()
         frontier.put((0, start))
@@ -140,49 +155,49 @@ class Mapping:
         # Rotate the car if necessary
         if abs(angle_diff) > 10:  # Threshold for rotation
             if angle_diff > 0:
-                self.PWM.setMotorModel(1000, 1000, -1000, -1000)  # Rotate right
+                self.motor.setMotorModel(1000, 1000, -1000, -1000)  # Rotate right
             else:
-                self.PWM.setMotorModel(-1000, -1000, 1000, 1000)  # Rotate left
+                self.motor.setMotorModel(-1000, -1000, 1000, 1000)  # Rotate left
             time.sleep(
                 abs(angle_diff) / 90
             )  # Adjust sleep time based on angle difference
-            self.PWM.setMotorModel(0, 0, 0, 0)  # Stop rotation
+            self.motor.setMotorModel(0, 0, 0, 0)  # Stop rotation
             self.car_orientation = target_angle
 
         # Move forward
         distance = math.sqrt(dx**2 + dy**2)
-        self.PWM.setMotorModel(600, 600, 600, 600)
+        self.motor.setMotorModel(600, 600, 600, 600)
         time.sleep(distance * 0.1)  # Adjust this factor based on your car's speed
-        self.PWM.setMotorModel(0, 0, 0, 0)  # Stop movement
+        self.motor.setMotorModel(0, 0, 0, 0)  # Stop movement
 
         # Update car position (this is an estimate, you might need to refine this)
         self.car_position = new_position
         print(f"Car moved to approximately {new_position}")
 
         # Perform a quick scan to check for obstacles
-        L = self.get_distance_at_angle(30)
-        M = self.get_distance_at_angle(90)
-        R = self.get_distance_at_angle(150)
+        #L = self.get_distance_at_angle(30)
+        #M = self.get_distance_at_angle(90)
+        #R = self.get_distance_at_angle(150)
 
         # Adjust position if obstacles are detected
-        if M < 30 or (L < 30 and R < 30):
-            print("Obstacle detected, adjusting position")
-            self.PWM.setMotorModel(-600, -600, -600, -600)
-            time.sleep(0.5)
-            self.PWM.setMotorModel(0, 0, 0, 0)
-            # Update position estimate (moving slightly backwards)
-            self.car_position = (
-                self.car_position[0]
-                - int(5 * math.cos(math.radians(self.car_orientation))),
-                self.car_position[1]
-                - int(5 * math.sin(math.radians(self.car_orientation))),
-            )
+        #if M < 30 or (L < 30 and R < 30):
+        #    print("Obstacle detected, adjusting position")
+        #    self.motor.setMotorModel(-600, -600, -600, -600)
+        #    time.sleep(0.5)
+        #    self.motor.setMotorModel(0, 0, 0, 0)
+        #    # Update position estimate (moving slightly backwards)
+        #    self.car_position = (
+        #        self.car_position[0]
+        #        - int(5 * math.cos(math.radians(self.car_orientation))),
+        #        self.car_position[1]
+        #        - int(5 * math.sin(math.radians(self.car_orientation))),
+        #    )
 
         return True
 
     def get_distance_at_angle(self, angle):
         self.servo.setServoPwm("0", angle)
-        time.sleep(0.1)
+        time.sleep(2)
         return self.ultrasonic.get_distance()
 
     def update_map_during_movement(self):
@@ -235,40 +250,49 @@ class Mapping:
     def scan_environment(self):
         print("Starting environment scan...")
         # Assuming this centers the servo vertically
-        self.servo.setServoPwm("1", 90)
+        self.servo.setServoPwm("1", 110)
 
-        scan_angles = range(30, 151, 6)  # Scan from 30 to 150 degrees in 6-degree steps
+        scan_angles = range(30, 130, 10)  # Scan from 30 to 150 degrees in 6-degree steps
         scan_results = {}
-
+        print(scan_angles)
         self.servo.setServoPwm("0", 90)
-        time.sleep(0.1)
+        time.sleep(0.2)
         distance = self.ultrasonic.get_distance()
         print(f"Scan at initial angle 90: Distance {distance} cm")
 
         for angle in scan_angles:
             self.servo.setServoPwm("0", angle)
-            time.sleep(0.2)
+            time.sleep(0.5)
             distance = self.ultrasonic.get_distance()
-            print(f"Scan at angle {angle}: Distance {distance} cm")
+            if distance == 0:
+                #fallback_distance = validate_distance(angle, scan_results, scan_angles)
+                #if fallback_distance is not None:
+                continue
             scan_results[angle] = distance
             self.update_map(distance, angle)
+            
+            print(f"Scan at angle {angle}: Distance {distance} cm")
+            
 
         # Improved interpolation using step function approach
-        for angle in range(30, 151):
+        for angle in range(30, 130):
             if angle not in scan_angles:
                 # Find the two nearest scanned angles
-                lower_angle = max([a for a in scan_angles if a <= angle])
-                upper_angle = min([a for a in scan_angles if a >= angle])
-
-                # Use the minimum distance of the two nearest scanned angles
-                interpolated_distance = min(
-                    scan_results[lower_angle], scan_results[upper_angle]
-                )
+                try:
+                        lower_angle = max([a for a in scan_angles if a <= angle])
+                        upper_angle = min([a for a in scan_angles if a >= angle])
+                        interpolated_distance = min(
+                            scan_results[lower_angle], scan_results[upper_angle]
+                        )
+                        self.update_map(interpolated_distance, angle)
+                except:
+                        interpolated_distance = "No Angles To Interpolate"
+              
 
                 print(
                     f"Interpolated scan at angle {angle}: Distance {interpolated_distance} cm"
                 )
-                self.update_map(interpolated_distance, angle)
+                
 
         print("Environment scan completed.")
 
@@ -281,9 +305,9 @@ class Mapping:
             cell_y = int(y + d * math.sin(rad_angle))
             if 0 <= cell_x < self.map_size and 0 <= cell_y < self.map_size:
                 self.known_map[cell_y, cell_x] = 0  # Mark as empty
-
         end_x = int(x + distance * math.cos(rad_angle))
         end_y = int(y + distance * math.sin(rad_angle))
+        print(f"endx: {end_x}, endy: {end_y}")
         if 0 <= end_x < self.map_size and 0 <= end_y < self.map_size:
             self.known_map[end_y, end_x] = 2  # Mark detected obstacle
 
@@ -364,7 +388,7 @@ class Mapping:
         plt.close()
         print(f"Map saved as {filename}")
 
-
+        
 class MockUltrasonic:
     def __init__(self, environment):
         self.environment = environment
