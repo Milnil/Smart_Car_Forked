@@ -121,8 +121,11 @@ class Mapping:
         print(f"Driving {distance} cm")
 
         self.drive_straight(80)
+        self.look_around()
 
         self.turn_right(.9)
+        self.look_around()
+
         self.drive_straight(60)
 
     def look_around(self):
