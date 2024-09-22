@@ -25,35 +25,35 @@ from Motor import *
 PWM=Motor()          
 def test_Motor(): 
     try:
-        PWM.setMotorModel(1000,1000,1000,1000)         #Forward
+        #PWM.setMotorModel(1000,1000,1000,1000)         #Forward
         print ("The car is moving forward")
         time.sleep(1)
-        PWM.setMotorModel(-1000,-1000,-1000,-1000)     #Back
+        #PWM.setMotorModel(-1000,-1000,-1000,-1000)     #Back
         print ("The car is going backwards")
         time.sleep(1)
         PWM.setMotorModel(-1500,-1500,2000,2000)       #Turn left
         print ("The car is turning left")
         time.sleep(1)
-        PWM.setMotorModel(2000,2000,-1500,-1500)       #Turn right 
+        #PWM.setMotorModel(2000,2000,-1500,-1500)       #Turn right 
         print ("The car is turning right")  
         time.sleep(1)
-        PWM.setMotorModel(-2000,2000,2000,-2000)       #Move left 
+        #PWM.setMotorModel(-2000,2000,2000,-2000)       #Move left 
         print ("The car is moving left")  
         time.sleep(1)
-        PWM.setMotorModel(2000,-2000,-2000,2000)       #Move right 
+        #PWM.setMotorModel(2000,-2000,-2000,2000)       #Move right 
         print ("The car is moving right")  
         time.sleep(1)    
             
-        PWM.setMotorModel(0,2000,2000,0)         #Move diagonally to the left and forward
+        #PWM.setMotorModel(0,2000,2000,0)         #Move diagonally to the left and forward
         print ("The car is moving diagonally to the left and forward")  
         time.sleep(1)
-        PWM.setMotorModel(0,-2000,-2000,0)       #Move diagonally to the right and backward
+        #PWM.setMotorModel(0,-2000,-2000,0)       #Move diagonally to the right and backward
         print ("The car is moving diagonally to the right and backward")  
         time.sleep(1) 
-        PWM.setMotorModel(2000,0,0,2000)         #Move diagonally to the right and forward
+        #PWM.setMotorModel(2000,0,0,2000)         #Move diagonally to the right and forward
         print ("The car is moving diagonally to the right and forward")  
         time.sleep(1)
-        PWM.setMotorModel(-2000,0,0,-2000)       #Move diagonally to the left and backward
+        #PWM.setMotorModel(-2000,0,0,-2000)       #Move diagonally to the left and backward
         print ("The car is moving diagonally to the left and backward")  
         time.sleep(1) 
         

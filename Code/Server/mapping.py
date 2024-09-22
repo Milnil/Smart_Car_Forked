@@ -26,7 +26,7 @@ class Mapping:
         self.goal = (250, 250) # (horizontal), (vertical)
         self.update_interval = 10  # Update map every 5 steps
         self.additional_padding = 5
-        self.detector = ObjectDetector()
+        self.detector = ObjectDetector(detection_confidence_threshold=.25)
 
         # Create output folder for visualizations
         self.output_folder = "mappings/Routing"
@@ -176,15 +176,15 @@ class Mapping:
             self.motor.setMotorModel(0, 0, 0, 0)  # Stop rotation
             self.car_orientation = target_angle
         else: 
-            #detector = ObjectDetector()
-            #if "stop sign" or "traffic light" in detector.detect_objects(1):
-            #        print("Obeying traffic laws :)")
-            #        time.sleep(5)
-            #        print("Done")
+            if "stop sign" or "traffic light" in self.detector.detect_objects(1):
+                    print("Obeying traffic laws :)")
+                    time.sleep(5)
+                    print("Done")
         
             # Move forward
             distance = math.sqrt(dx**2 + dy**2)
-            self.motor.setMotorModel(600, 600, 600, 600)
+            motor_speed = 1000
+            self.motor.setMotorModel(motor_speed, motor_speed, motor_speed, motor_speed)
             time.sleep(distance * 0.1)  # Adjust this factor based on your car's speed
             self.motor.setMotorModel(0, 0, 0, 0)  # Stop movement
 
@@ -451,6 +451,7 @@ class MockMotor:
 
 # Example usage
 if __name__ == "__main__":
+    #os.environ['QT_QPA_PLATFORM'] = 'xcb'
     mapper = Mapping()
     print("Visualizing initial map configuration...")
     mapper.visualize_map(mapper.true_map, "Initial Map Configuration")
