@@ -9,10 +9,11 @@ import shutil
 from Motor import *
 from Ultrasonic import *
 from servo import *
+from ObjectDetector import *
 
 
 class Mapping:
-    def __init__(self, map_size=100, resolution=1):
+    def __init__(self, map_size=400, resolution=4):
         self.map_size = map_size
         self.resolution = resolution
         self.true_map = np.zeros((map_size, map_size), dtype=int)
@@ -22,9 +23,10 @@ class Mapping:
         self.car_position = (map_size // 2, self.car_height // 2)
         self.car_orientation = 90  # 90 degrees is facing up (north)
         self.servo_angle = 90  # Initialize servo angle
-        self.goal = (map_size - 25, map_size - 50) # x, y
-        self.update_interval = 5  # Update map every 5 steps
+        self.goal = (250, 250) # (horizontal), (vertical)
+        self.update_interval = 10  # Update map every 5 steps
         self.additional_padding = 5
+        self.detector = ObjectDetector()
 
         # Create output folder for visualizations
         self.output_folder = "mappings/Routing"
@@ -142,6 +144,9 @@ class Mapping:
             print(f"Cannot move to {new_position}, obstacle detected or out of bounds.")
             return False
 
+        # TODO: make sure the car doesn't rotate and move forward in the same call
+        
+        
         # Calculate the desired movement
         dx = new_position[0] - self.car_position[0]
         dy = new_position[1] - self.car_position[1]
@@ -151,28 +156,41 @@ class Mapping:
 
         # Calculate the difference between current orientation and target angle
         angle_diff = (target_angle - self.car_orientation + 180) % 360 - 180
-
+        
+        
         # Rotate the car if necessary
+        # TODO: fix the left turn
         if abs(angle_diff) > 10:  # Threshold for rotation
             if angle_diff > 0:
-                self.motor.setMotorModel(1000, 1000, -1000, -1000)  # Rotate right
+                print("rotating right")
+                
+                self.motor.setMotorModel(2000, 2000, -2000, -2000)  # Rotate right
+                time.sleep(
+                1)
             else:
-                self.motor.setMotorModel(-1000, -1000, 1000, 1000)  # Rotate left
-            time.sleep(
-                abs(angle_diff) / 90
-            )  # Adjust sleep time based on angle difference
+                print("rotating left")
+                self.motor.setMotorModel(-2000, -2000, 2000, 2000)  # Rotate left
+                time.sleep(
+                        1.5)  # Adjust sleep time based on angle difference
+            print(f"Angle diff: {angle_diff}")
             self.motor.setMotorModel(0, 0, 0, 0)  # Stop rotation
             self.car_orientation = target_angle
+        else: 
+            #detector = ObjectDetector()
+            #if "stop sign" or "traffic light" in detector.detect_objects(1):
+            #        print("Obeying traffic laws :)")
+            #        time.sleep(5)
+            #        print("Done")
+        
+            # Move forward
+            distance = math.sqrt(dx**2 + dy**2)
+            self.motor.setMotorModel(600, 600, 600, 600)
+            time.sleep(distance * 0.1)  # Adjust this factor based on your car's speed
+            self.motor.setMotorModel(0, 0, 0, 0)  # Stop movement
 
-        # Move forward
-        distance = math.sqrt(dx**2 + dy**2)
-        self.motor.setMotorModel(600, 600, 600, 600)
-        time.sleep(distance * 0.1)  # Adjust this factor based on your car's speed
-        self.motor.setMotorModel(0, 0, 0, 0)  # Stop movement
-
-        # Update car position (this is an estimate, you might need to refine this)
-        self.car_position = new_position
-        print(f"Car moved to approximately {new_position}")
+            # Update car position (this is an estimate, you might need to refine this)
+            self.car_position = new_position
+            print(f"Car moved to approximately {new_position}")
 
         # Perform a quick scan to check for obstacles
         #L = self.get_distance_at_angle(30)
@@ -197,7 +215,7 @@ class Mapping:
 
     def get_distance_at_angle(self, angle):
         self.servo.setServoPwm("0", angle)
-        time.sleep(2)
+        time.sleep(.2)
         return self.ultrasonic.get_distance()
 
     def update_map_during_movement(self):
@@ -262,7 +280,7 @@ class Mapping:
 
         for angle in scan_angles:
             self.servo.setServoPwm("0", angle)
-            time.sleep(0.5)
+            time.sleep(0.2)
             distance = self.ultrasonic.get_distance()
             if distance == 0:
                 #fallback_distance = validate_distance(angle, scan_results, scan_angles)
@@ -271,7 +289,7 @@ class Mapping:
             scan_results[angle] = distance
             self.update_map(distance, angle)
             
-            print(f"Scan at angle {angle}: Distance {distance} cm")
+            #print(f"Scan at angle {angle}: Distance {distance} cm")
             
 
         # Improved interpolation using step function approach
@@ -289,9 +307,9 @@ class Mapping:
                         interpolated_distance = "No Angles To Interpolate"
               
 
-                print(
-                    f"Interpolated scan at angle {angle}: Distance {interpolated_distance} cm"
-                )
+                #print(
+                #    f"Interpolated scan at angle {angle}: Distance {interpolated_distance} cm"
+                #)
                 
 
         print("Environment scan completed.")
@@ -307,7 +325,7 @@ class Mapping:
                 self.known_map[cell_y, cell_x] = 0  # Mark as empty
         end_x = int(x + distance * math.cos(rad_angle))
         end_y = int(y + distance * math.sin(rad_angle))
-        print(f"endx: {end_x}, endy: {end_y}")
+        #print(f"endx: {end_x}, endy: {end_y}")
         if 0 <= end_x < self.map_size and 0 <= end_y < self.map_size:
             self.known_map[end_y, end_x] = 2  # Mark detected obstacle
 
