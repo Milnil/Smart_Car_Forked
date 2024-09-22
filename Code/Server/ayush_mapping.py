@@ -29,7 +29,7 @@ class Mapping:
         self.object_cooldown = 30  # Number of steps before re-detecting the same object
         self.object_cooldown_counter = {}
         self.detection_range = (
-            15  # Distance in cm within which to perform object detection
+            20  # Distance in cm within which to perform object detection
         )
 
         # Create output folder for visualizations
@@ -137,11 +137,11 @@ class Mapping:
         # Consider the minimum distance from these three directions
         min_distance = min(forward_distance, left_distance, right_distance)
 
-        # Calculate a safe distance to move (e.g., 2/3 of the minimum distance)
-        safe_distance = int(min_distance * 2 / 3)
+        # Calculate a safe distance to move
+        safe_distance = int(min_distance * 1 / 2)
 
-        # Limit the safe distance to a maximum value (e.g., 50 cm)
-        return min(safe_distance, 50)
+        # Limit the safe distance to a maximum val
+        return min(safe_distance, 30)
 
     def turn_towards_goal(self):
         goal_x, goal_y = self.goal
