@@ -3,24 +3,20 @@ import socket
 from Motor import *
 import RPi.GPIO as GPIO
 from PCA9685 import PCA9685
-import random  # To simulate the temperature data
 from gpiozero import CPUTemperature
-from picamera import PiCamera
-from io import BytesIO
-
 import select
 import queue
 
+# Import Picamera2 and necessary components
+from picamera2 import Picamera2, Preview
+import io
+from PIL import Image
 
 class CombinedCar:
     def __init__(self, host="192.168.10.59", port=65434):
         # Initialize GPIO
         GPIO.setwarnings(False)
         GPIO.setmode(GPIO.BCM)
-        # Initialize Camera
-        self.camera = PiCamera()
-        self.camera.resolution = (320, 240)  
-        self.camera.framerate = 24
         # Initialize ultrasonic sensor pins
         self.trigger_pin = 27
         self.echo_pin = 22
@@ -44,23 +40,27 @@ class CombinedCar:
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind((self.host, self.port))
         self.server_socket.listen()
-        self.direction = None
+        self.direction = "stopped"
         self.command_map = {
             '87': 'w',  # "W" key for moving forward
             '83': 's',  # "S" key for moving backward
             '65': 'a',  # "A" key for turning left
-            '68': 'd',   # "D" key for turning right
+            '68': 'd',  # "D" key for turning right
             '0': 'stop'
         }
         print(f"Server listening on {self.host}:{self.port}")
 
+        # Initialize Picamera2
+        self.picam2 = Picamera2()
+        # Configure the camera
+        self.configure_camera()
 
-    def capture_image(self):
-        stream = BytesIO()
-        self.camera.capture(stream, format='jpeg')
-        stream.seek(0)
-        return stream.read()
-
+    def configure_camera(self):
+        # Create a configuration suitable for video preview
+        video_config = self.picam2.create_still_configuration(main={"size": (320, 240)})
+        self.picam2.configure(video_config)
+        # Start the camera
+        self.picam2.start()
 
     def pulseIn(self, pin, level, timeOut):
         t0 = time.time()
@@ -94,7 +94,7 @@ class CombinedCar:
         direction = self.direction
         temperature = self.get_temperature()
         distance = self.get_distance()
-        return f"{direction}, {temperature}, {distance}"
+        return f"{direction},{temperature},{distance}"
 
     def handle_drive_command(self, command):
         # Handle the driving commands based on w/a/s/d
@@ -123,6 +123,16 @@ class CombinedCar:
             # Stop the car if the command is not recognized
             self.PWM.setMotorModel(0, 0, 0, 0)
 
+    def capture_image(self):
+        # Capture image using Picamera2
+        image = self.picam2.capture_array()
+        # Convert the image array to JPEG bytes
+        img = Image.fromarray(image)
+        img_byte_arr = io.BytesIO()
+        img.save(img_byte_arr, format='JPEG')
+        image_bytes = img_byte_arr.getvalue()
+        return image_bytes
+
     def run(self):
         self.server_socket.setblocking(False)
         inputs = [self.server_socket]
@@ -150,6 +160,7 @@ class CombinedCar:
                                 self.handle_drive_command(self.command_map[data])
                             elif data == "0":
                                 self.PWM.setMotorModel(0, 0, 0, 0)
+                                self.direction = "stopped"
 
                             # Prepare car status
                             car_status = self.get_car_status()
@@ -158,10 +169,12 @@ class CombinedCar:
                             image_data = self.capture_image()
                             image_size = len(image_data)
 
-                            # Send car status and image size
-                            message = f"{car_status}|{image_size}"
-                            message_queues[s].put(message.encode('utf-8'))
-                            message_queues[s].put(image_data)
+                            # Prepare header
+                            header = f"{car_status}\n{image_size}\n\n"
+                            header_bytes = header.encode('utf-8')
+
+                            # Send header and image data
+                            message_queues[s].put(header_bytes + image_data)
 
                             if s not in outputs:
                                 outputs.append(s)
@@ -207,9 +220,9 @@ class CombinedCar:
 
         self.cleanup()
 
-
     def cleanup(self):
         self.PWM.setMotorModel(0, 0, 0, 0)
+        self.picam2.stop()
         GPIO.cleanup()
 
 
