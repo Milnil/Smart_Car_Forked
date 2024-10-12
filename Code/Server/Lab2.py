@@ -3,9 +3,12 @@ import socket
 from Motor import *
 import RPi.GPIO as GPIO
 from PCA9685 import PCA9685
-#from Led import Led  # Import the Led class
+from Led import Led  # Import the Led class
 import random  # To simulate the temperature data
 from gpiozero import CPUTemperature
+
+import select
+import queue
 
 
 class CombinedCar:
@@ -31,7 +34,7 @@ class CombinedCar:
         self.PWM = Motor()
         self.M = 0
         # Initialize LED
-        #self.led = Led()
+        self.led = Led()
         # Server setup
         self.host = host
         self.port = port
@@ -66,34 +69,34 @@ class CombinedCar:
 
     def get_temperature(self):
         cpu = CPUTemperature()
-        return cpu if cpu else 0.0
+        return cpu
 
     def get_car_status(self):
         # Get the current car status including direction, temperature, and distance
         direction = self.direction
         temperature = self.get_temperature()
-        distance = self.get_distance() if self.get_distance else 0.0
+        distance = self.get_distance()
         return f"{direction}, {temperature}, {distance}"
 
     def handle_drive_command(self, command):
         # Handle the driving commands based on w/a/s/d
-        if command == 'w':  # Move forward
+        if command == "w":  # Move forward
             print("Moving forward")
             self.direction = "forward"
             self.PWM.setMotorModel(1000, 1000, 1000, 1000)
-        elif command == 's':  # Move backward
+        elif command == "s":  # Move backward
             print("Moving backward")
             self.direction = "backward"
             self.PWM.setMotorModel(-1000, -1000, -1000, -1000)
-        elif command == 'a':  # Turn left
+        elif command == "a":  # Turn left
             print("Turning left")
             self.direction = "left"
             self.PWM.setMotorModel(-500, -500, 1500, 1500)
-        elif command == 'd':  # Turn right
+        elif command == "d":  # Turn right
             print("Turning right")
             self.direction = "right"
             self.PWM.setMotorModel(1500, 1500, -500, -500)
-        elif command == 'stop':
+        elif command == "stop":
             print("Stopping")
             self.direction = "stopped"
             self.PWM.setMotorModel(0, 0, 0, 0)
@@ -103,56 +106,79 @@ class CombinedCar:
             self.PWM.setMotorModel(0, 0, 0, 0)
 
     def run(self):
-        # Accept a connection from the client
-        client_socket, client_info = self.server_socket.accept()
-        print("Connected by", client_info)
-        try:
-            while True:
+        self.server_socket.setblocking(False)
+        inputs = [self.server_socket]
+        outputs = []
+        message_queues = {}
 
-                # Receive data from the client
-                data = client_socket.recv(1024).decode().strip().lower()
+        while inputs:
+            readable, writable, exceptional = select.select(
+                inputs, outputs, inputs, 0.1
+            )
 
-                print(f"Received command: {data}")
-
-                command_map = {
-                    '87': 'w',  # "W" key for moving forward
-                    '83': 's',  # "S" key for moving backward
-                    '65': 'a',  # "A" key for turning left
-                    '68': 'd',   # "D" key for turning right
-                    '0': 'stop'
-                }
-                
-                # If the data is one of w/a/s/d, handle driving commands
-                if data:
-                    self.handle_drive_command(command_map[data])
+            for s in readable:
+                if s is self.server_socket:
+                    client_socket, client_address = s.accept()
+                    print(f"New connection from {client_address}")
+                    client_socket.setblocking(False)
+                    inputs.append(client_socket)
+                    message_queues[client_socket] = queue.Queue()
                 else:
-                    print(data)
-                    print("Client disconnected or sent invalid data.")
-                    self.PWM.setMotorModel(0, 0, 0, 0)  # Stop if invalid command
+                    try:
+                        data = s.recv(1024).decode().strip().lower()
+                        if data:
+                            print(f"Received command: {data}")
+                            if data in self.command_map:
+                                self.handle_drive_command(self.command_map[data])
+                            elif data == "0":
+                                self.PWM.setMotorModel(
+                                    0, 0, 0, 0
+                                )  # Stop if no key pressed
 
-                # Send car status to the connected client
-                car_status = self.get_car_status()
-                print(f'Car_status = {car_status}')
+                            # Queue the car status to be sent
+                            car_status = self.get_car_status()
+                            message_queues[s].put(car_status)
+                            if s not in outputs:
+                                outputs.append(s)
+                        else:
+                            # Interpret empty result as closed connection
+                            print(f"Closing {s.getpeername()}")
+                            if s in outputs:
+                                outputs.remove(s)
+                            inputs.remove(s)
+                            s.close()
+                            del message_queues[s]
+                    except ConnectionResetError:
+                        print(f"Connection reset by {s.getpeername()}")
+                        if s in outputs:
+                            outputs.remove(s)
+                        inputs.remove(s)
+                        s.close()
+                        del message_queues[s]
+
+            for s in writable:
                 try:
-                    if car_status:
-                        print(f"Sent to client: {car_status.encode('utf-8')}")
-                        client_socket.sendall(car_status.encode('utf-8'))
-                except BrokenPipeError:
-                    print("Client disconnected, broken pipe")
-                    break  # Break out of the loop to stop the server from sending data
+                    next_msg = message_queues[s].get_nowait()
+                except queue.Empty:
+                    outputs.remove(s)
+                else:
+                    print(f"Sending {next_msg} to {s.getpeername()}")
+                    s.send(next_msg.encode("utf-8"))
 
-        except Exception as e:
-            print(f"An error occurred: {e}")
-        finally:
-            print("Closing connection and cleaning up.")
-            client_socket.close()
-            self.cleanup()
+            for s in exceptional:
+                print(f"Handling exceptional condition for {s.getpeername()}")
+                inputs.remove(s)
+                if s in outputs:
+                    outputs.remove(s)
+                s.close()
+                del message_queues[s]
 
+        self.cleanup()
 
-    def cleanup(self):
-        self.PWM.setMotorModel(0, 0, 0, 0)
-        #self.led.colorWipe(self.led.strip, Color(0, 0, 0), 10)
-        GPIO.cleanup()
+        def cleanup(self):
+            self.PWM.setMotorModel(0, 0, 0, 0)
+            self.led.colorWipe(self.led.strip, Color(0, 0, 0), 10)
+            GPIO.cleanup()
 
 
 # Main program logic follows:
