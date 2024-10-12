@@ -126,12 +126,17 @@ class CombinedCar:
                 if data:
                     self.handle_drive_command(command_map[data])
                 else:
+                    print("Client disconnected or sent invalid data.")
                     self.PWM.setMotorModel(0, 0, 0, 0)  # Stop if invalid command
 
                 # Send car status to the connected client
                 car_status = self.get_car_status()
-                client_socket.sendall(car_status.encode('utf-8'))
-                print(f"Sent to client: {car_status}")
+                try:
+                    client_socket.sendall(car_status.encode('utf-8'))
+                    print(f"Sent to client: {car_status}")
+                except BrokenPipeError:
+                    print("Client disconnected, broken pipe")
+                    break  # Break out of the loop to stop the server from sending data
 
         except Exception as e:
             print(f"An error occurred: {e}")
