@@ -132,9 +132,10 @@ class CombinedCar:
 
                 # Send car status to the connected client
                 car_status = self.get_car_status()
-                print(car_status)
+                print(f'Car_status = {car_status}')
                 try:
-                    client_socket.sendall(car_status.encode('utf-8'))
+                    if car_status:
+                        client_socket.sendall(car_status.encode('utf-8'))
                     print(f"Sent to client: {car_status}")
                 except BrokenPipeError:
                     print("Client disconnected, broken pipe")
