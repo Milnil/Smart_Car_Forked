@@ -5,6 +5,8 @@ import RPi.GPIO as GPIO
 from PCA9685 import PCA9685
 import random  # To simulate the temperature data
 from gpiozero import CPUTemperature
+from picamera import PiCamera
+from io import BytesIO
 
 import select
 import queue
@@ -15,6 +17,10 @@ class CombinedCar:
         # Initialize GPIO
         GPIO.setwarnings(False)
         GPIO.setmode(GPIO.BCM)
+        # Initialize Camera
+        self.camera = PiCamera()
+        self.camera.resolution = (320, 240)  
+        self.camera.framerate = 24
         # Initialize ultrasonic sensor pins
         self.trigger_pin = 27
         self.echo_pin = 22
@@ -47,6 +53,14 @@ class CombinedCar:
             '0': 'stop'
         }
         print(f"Server listening on {self.host}:{self.port}")
+
+
+    def capture_image(self):
+        stream = BytesIO()
+        self.camera.capture(stream, format='jpeg')
+        stream.seek(0)
+        return stream.read()
+
 
     def pulseIn(self, pin, level, timeOut):
         t0 = time.time()
@@ -129,31 +143,38 @@ class CombinedCar:
                     message_queues[client_socket] = queue.Queue()
                 else:
                     try:
-                        data = s.recv(1024).decode().strip().lower()
+                        data = s.recv(1024).decode().strip()
                         if data:
                             print(f"Received command: {data}")
                             if data in self.command_map:
                                 self.handle_drive_command(self.command_map[data])
                             elif data == "0":
-                                self.PWM.setMotorModel(
-                                    0, 0, 0, 0
-                                )  # Stop if no key pressed
+                                self.PWM.setMotorModel(0, 0, 0, 0)
 
-                            # Queue the car status to be sent
+                            # Prepare car status
                             car_status = self.get_car_status()
-                            message_queues[s].put(car_status)
+
+                            # Capture image
+                            image_data = self.capture_image()
+                            image_size = len(image_data)
+
+                            # Send car status and image size
+                            message = f"{car_status}|{image_size}"
+                            message_queues[s].put(message.encode('utf-8'))
+                            message_queues[s].put(image_data)
+
                             if s not in outputs:
                                 outputs.append(s)
                         else:
-                            # Interpret empty result as closed connection
-                            print(f"Closing {s.getpeername()}")
+                            # Client disconnected
+                            print(f"Closing connection to {s.getpeername()}")
                             if s in outputs:
                                 outputs.remove(s)
                             inputs.remove(s)
                             s.close()
                             del message_queues[s]
-                    except ConnectionResetError:
-                        print(f"Connection reset by {s.getpeername()}")
+                    except Exception as e:
+                        print(f"Error: {e}")
                         if s in outputs:
                             outputs.remove(s)
                         inputs.remove(s)
@@ -166,11 +187,18 @@ class CombinedCar:
                 except queue.Empty:
                     outputs.remove(s)
                 else:
-                    print(f"Sending {next_msg} to {s.getpeername()}")
-                    s.send(next_msg.encode("utf-8"))
+                    try:
+                        s.sendall(next_msg)
+                    except Exception as e:
+                        print(f"Send error: {e}")
+                        if s in outputs:
+                            outputs.remove(s)
+                        inputs.remove(s)
+                        s.close()
+                        del message_queues[s]
 
             for s in exceptional:
-                print(f"Handling exceptional condition for {s.getpeername()}")
+                print(f"Exception on {s.getpeername()}")
                 inputs.remove(s)
                 if s in outputs:
                     outputs.remove(s)
@@ -178,6 +206,7 @@ class CombinedCar:
                 del message_queues[s]
 
         self.cleanup()
+
 
     def cleanup(self):
         self.PWM.setMotorModel(0, 0, 0, 0)
