@@ -78,7 +78,7 @@ class Mapping:
         
 
         
-        self.turn_right(.9)        # Turn right 90 degrees
+        self.turn_right(.7)        # Turn right 90 degrees
         self.look_around()
         
         distance = ultrasonic.get_distance()
@@ -89,11 +89,11 @@ class Mapping:
         self.drive_straight(25) # Drive straight again
         self.look_around()
         
-        self.turn_left(1.15)
+        self.turn_left(.85)
         self.look_around()
 
         # STOP FOR STOP SIGN
-
+        time.sleep(5)
 
         # DRIVE STRAIGHT TILL LEVEL WITH GOAL
         distance = ultrasonic.get_distance()
@@ -101,10 +101,10 @@ class Mapping:
                 distance = ultrasonic.get_distance
         print(f"Driving {distance} cm")
 
-        self.drive_straight(60)
+        self.drive_straight(90)
         self.look_around()
         
-        self.turn_left(1.15)
+        self.turn_left(.85)
         self.look_around()
         
         # DRIVE TO GOAL

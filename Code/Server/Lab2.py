@@ -3,7 +3,7 @@ import socket
 from Motor import *
 import RPi.GPIO as GPIO
 from PCA9685 import PCA9685
-from Led import Led  # Import the Led class
+#from Led import Led  # Import the Led class
 import random  # To simulate the temperature data
 from gpiozero import CPUTemperature
 
@@ -31,7 +31,7 @@ class CombinedCar:
         self.PWM = Motor()
         self.M = 0
         # Initialize LED
-        self.led = Led()
+        #self.led = Led()
         # Server setup
         self.host = host
         self.port = port
@@ -143,7 +143,7 @@ class CombinedCar:
 
     def cleanup(self):
         self.PWM.setMotorModel(0, 0, 0, 0)
-        self.led.colorWipe(self.led.strip, Color(0, 0, 0), 10)
+        #self.led.colorWipe(self.led.strip, Color(0, 0, 0), 10)
         GPIO.cleanup()
 
 

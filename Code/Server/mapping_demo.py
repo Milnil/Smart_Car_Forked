@@ -13,7 +13,7 @@ from ObjectDetector import *
 
 
 class Mapping:
-    def __init__(self, map_size=400, resolution=4):
+    def __init__(self, map_size=100, resolution=4):
         self.map_size = map_size
         self.resolution = resolution
         self.true_map = np.zeros((map_size, map_size), dtype=int)
@@ -43,8 +43,8 @@ class Mapping:
         self.motor = Motor()
 
         #initializing mock components
-        self.mock_ultrasonic = MockUltrasonic()
-        self.mock_servo = MockServo()
+        #self.mock_ultrasonic = MockUltrasonic()
+        #self.mock_servo = MockServo()
         self.mock_motor = MockMotor()
 
         
@@ -256,7 +256,7 @@ class Mapping:
         # Assuming this centers the servo vertically
         self.servo.setServoPwm("1", 110)
 
-        scan_angles = range(30, 130, 10)  # Scan from 30 to 150 degrees in 6-degree steps
+        scan_angles = range(0, 180, 10)  # Scan from 30 to 150 degrees in 6-degree steps
         scan_results = {}
         print(scan_angles)
         self.servo.setServoPwm("0", 90)

@@ -71,62 +71,66 @@ class Mapping:
         # Driving into box 1
         distance = ultrasonic.get_distance()
         while distance == 0:
-                distance = ultrasonic.get_distance
+                distance = ultrasonic.get_distance()
         print(f"Driving {distance} cm")
         self.drive_straight(distance-20)  # Drive straight for 50 cm
         self.look_around()
         
 
         
-        self.turn_right(.9)        # Turn right 90 degrees
+        self.turn_right(.8)        # Turn right 90 degrees
         self.look_around()
         
         distance = ultrasonic.get_distance()
         while distance == 0:
-                distance = ultrasonic.get_distance
+                distance = ultrasonic.get_distance()
         print(f"Driving {distance} cm")
 
-        self.drive_straight(25) # Drive straight again
+        self.drive_straight(35) # Drive straight again
         self.look_around()
         
-        self.turn_left(1.15)
+        self.turn_left(1.05)
         self.look_around()
 
         # Driving into box 2
         distance = ultrasonic.get_distance()
         while distance == 0:
-                distance = ultrasonic.get_distance
+                distance = ultrasonic.get_distance()
         print(f"Driving {distance} cm")
 
         self.drive_straight(distance-20)
         self.look_around()
         
-        self.turn_left(1.15)
+        # TURN AT THE BAG
+        
+        self.turn_left(1.1)
         self.look_around()
         
         distance = ultrasonic.get_distance()
         while distance == 0:
-                distance = ultrasonic.get_distance
+                distance = ultrasonic.get_distance()
         print(f"Driving {distance} cm")
 
         self.drive_straight(40)
         self.look_around()
         
-        self.turn_right(.9)
+        self.turn_right(.8)
         self.look_around()
         
         distance = ultrasonic.get_distance()
         while distance == 0:
-                distance = ultrasonic.get_distance
+                distance = ultrasonic.get_distance()
         print(f"Driving {distance} cm")
 
         self.drive_straight(80)
         self.look_around()
+        
+        # TURN TO FACE THE GOAL
 
-        self.turn_right(.9)
+        self.turn_right(.8)
         self.look_around()
 
-        self.drive_straight(60)
+        self.drive_straight(50)
 
     def look_around(self):
         self.servo.setServoPwm("1", 90)
