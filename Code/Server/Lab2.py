@@ -72,7 +72,7 @@ class CombinedCar:
         return int(distance_cm[2])
 
     def get_temperature(self):
-        cpu = CPUTemperature()
+        cpu = str(CPUTemperature().temperature)
         return cpu
 
     def get_car_status(self):
@@ -179,9 +179,9 @@ class CombinedCar:
 
         self.cleanup()
 
-        def cleanup(self):
-            self.PWM.setMotorModel(0, 0, 0, 0)
-            GPIO.cleanup()
+    def cleanup(self):
+        self.PWM.setMotorModel(0, 0, 0, 0)
+        GPIO.cleanup()
 
 
 # Main program logic follows:
