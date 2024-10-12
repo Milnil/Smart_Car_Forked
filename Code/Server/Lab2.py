@@ -3,7 +3,6 @@ import socket
 from Motor import *
 import RPi.GPIO as GPIO
 from PCA9685 import PCA9685
-from Led import Led  # Import the Led class
 import random  # To simulate the temperature data
 from gpiozero import CPUTemperature
 
@@ -12,7 +11,7 @@ import queue
 
 
 class CombinedCar:
-    def __init__(self, host="192.168.10.59", port=65432):
+    def __init__(self, host="192.168.10.59", port=65434):
         # Initialize GPIO
         GPIO.setwarnings(False)
         GPIO.setmode(GPIO.BCM)
@@ -33,8 +32,6 @@ class CombinedCar:
         # Initialize Motor
         self.PWM = Motor()
         self.M = 0
-        # Initialize LED
-        self.led = Led()
         # Server setup
         self.host = host
         self.port = port
@@ -42,6 +39,13 @@ class CombinedCar:
         self.server_socket.bind((self.host, self.port))
         self.server_socket.listen()
         self.direction = None
+        self.command_map = {
+            '87': 'w',  # "W" key for moving forward
+            '83': 's',  # "S" key for moving backward
+            '65': 'a',  # "A" key for turning left
+            '68': 'd',   # "D" key for turning right
+            '0': 'stop'
+        }
         print(f"Server listening on {self.host}:{self.port}")
 
     def pulseIn(self, pin, level, timeOut):
@@ -177,7 +181,6 @@ class CombinedCar:
 
         def cleanup(self):
             self.PWM.setMotorModel(0, 0, 0, 0)
-            self.led.colorWipe(self.led.strip, Color(0, 0, 0), 10)
             GPIO.cleanup()
 
 
