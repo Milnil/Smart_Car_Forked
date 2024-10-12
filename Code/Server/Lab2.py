@@ -66,13 +66,13 @@ class CombinedCar:
 
     def get_temperature(self):
         cpu = CPUTemperature()
-        return cpu
+        return cpu if cpu else 0.0
 
     def get_car_status(self):
         # Get the current car status including direction, temperature, and distance
         direction = self.direction
         temperature = self.get_temperature()
-        distance = self.get_distance()
+        distance = self.get_distance() if self.get_distance else 0.0
         return f"{direction}, {temperature}, {distance}"
 
     def handle_drive_command(self, command):
@@ -126,11 +126,13 @@ class CombinedCar:
                 if data:
                     self.handle_drive_command(command_map[data])
                 else:
+                    print(data)
                     print("Client disconnected or sent invalid data.")
                     self.PWM.setMotorModel(0, 0, 0, 0)  # Stop if invalid command
 
                 # Send car status to the connected client
                 car_status = self.get_car_status()
+                print(car_status)
                 try:
                     client_socket.sendall(car_status.encode('utf-8'))
                     print(f"Sent to client: {car_status}")
