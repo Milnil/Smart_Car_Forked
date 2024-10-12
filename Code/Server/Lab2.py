@@ -135,8 +135,8 @@ class CombinedCar:
                 print(f'Car_status = {car_status}')
                 try:
                     if car_status:
+                        print(f"Sent to client: {car_status.encode('utf-8')}")
                         client_socket.sendall(car_status.encode('utf-8'))
-                    print(f"Sent to client: {car_status}")
                 except BrokenPipeError:
                     print("Client disconnected, broken pipe")
                     break  # Break out of the loop to stop the server from sending data
