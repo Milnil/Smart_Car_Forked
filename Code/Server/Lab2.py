@@ -48,11 +48,11 @@ class CombinedCar:
         self.M = 0
         logging.debug("Motor initialized")
 
-        self.servo = Servo()
-        self.servo.setServoPwm("1", 90)
-        time.sleep(.2)
-        self.servo.setServoPwm("0", 90)
-        time.sleep(0.2)
+        #self.servo = Servo()
+        #self.servo.setServoPwm("1", 90)
+        #time.sleep(.2)
+        #self.servo.setServoPwm("0", 90)
+        #time.sleep(0.2)
         # Server setup
         self.host = host
         self.port = port
