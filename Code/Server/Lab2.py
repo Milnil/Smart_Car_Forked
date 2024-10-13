@@ -1,12 +1,13 @@
 import time
 import socket
 from Motor import *
+from servo import *
 import RPi.GPIO as GPIO
 from PCA9685 import PCA9685
 from gpiozero import CPUTemperature
 import select
 import queue
-
+from ADC import *
 from picamera2 import Picamera2
 import cv2
 import logging
@@ -46,6 +47,12 @@ class CombinedCar:
         self.PWM = Motor()
         self.M = 0
         logging.debug("Motor initialized")
+
+        self.servo = Servo()
+        self.servo.setServoPwm("1", 90)
+        time.sleep(.2)
+        self.servo.setServoPwm("0", 90)
+        time.sleep(0.2)
         # Server setup
         self.host = host
         self.port = port
@@ -63,6 +70,7 @@ class CombinedCar:
         logging.info(f"Server listening on {self.host}:{self.port}")
         print(f"Server listening on {self.host}:{self.port}")
 
+        self.adc = Adc()
         # Initialize Picamera2
         self.picam2 = Picamera2()
         # Configure the camera
@@ -111,11 +119,13 @@ class CombinedCar:
         return cpu_temp
 
     def get_car_status(self):
-        # Get the current car status including direction, temperature, and distance
+        # Get the current car status including direction,temperature,battery
+        Power=self.adc.recvADC(2)
+        battery_life = str(Power*3)
         direction = self.direction
         temperature = self.get_temperature()
         distance = self.get_distance()
-        car_status = f"{direction},{temperature},{distance}"
+        car_status = f"{direction},{temperature},{distance},{battery_life}"
         logging.debug(f"Car status: {car_status}")
         return car_status
 
