@@ -17,10 +17,10 @@ import subprocess
 import re
 
 # Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+# logging.basicConfig(
+#     level=logging.DEBUG,
+#     format='%(asctime)s - %(levelname)s - %(message)s'
+# )
 
 def scan_access_points(limit=5):
     try:
@@ -32,15 +32,25 @@ def scan_access_points(limit=5):
             check=True
         )
 
-        # Parse the output to find access points
+        # Parse the output for detailed information
         output = result.stdout
-        access_points = re.findall(r"Cell \d+ - Address: ([\w:]+).*?ESSID:\"([^\"]*)\"", output, re.DOTALL)
+        access_points = re.findall(
+            r"Cell \d+ - Address: ([\w:]+).*?ESSID:\"([^\"]*)\".*?Quality=([\d/]+).*?Signal level=(-?\d+ dBm).*?Frequency:([\d.]+ GHz).*?Encryption key:(on|off)",
+            output,
+            re.DOTALL
+        )
 
-        # Print only the specified number of access points
-        for i, (address, essid) in enumerate(access_points[:limit]):
+        for i, (mac, essid, quality, signal, frequency, encryption) in enumerate(access_points[:limit]):
+            # Calculate the percentage for signal quality
+            quality_percentage = eval(quality) * 100  # Convert quality ratio to percentage
+
             print(f"Access Point {i + 1}:")
-            print(f"  MAC Address: {address}")
-            print(f"  ESSID: {essid}\n")
+            print(f"  MAC Address: {mac}")
+            print(f"  ESSID: {essid}")
+            print(f"  Signal Quality: {quality} ({quality_percentage:.0f}%)")
+            print(f"  Signal Strength: {signal}")
+            print(f"  Frequency: {frequency}")
+            print(f"  Encryption: {'Enabled' if encryption == 'on' else 'Disabled'}\n")
 
     except subprocess.CalledProcessError as e:
         print(f"An error occurred: {e.stderr}")
