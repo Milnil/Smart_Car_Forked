@@ -16,11 +16,10 @@ from PIL import Image
 import subprocess  
 import re
 
-# Configure logging
-# logging.basicConfig(
-#     level=logging.DEBUG,
-#     format='%(asctime)s - %(levelname)s - %(message)s'
-# )
+logging.basicConfig(
+    level=logging.ERROR,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 def scan_access_points(limit=5):
     try:
