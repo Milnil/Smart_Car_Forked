@@ -14,7 +14,7 @@ import logging
 import io
 from PIL import Image
 import subprocess  
-
+import re
 
 # Configure logging
 logging.basicConfig(
@@ -282,21 +282,25 @@ class CombinedCar:
                         del message_queues[s]
 
             for s in writable:
-                try:
-                    next_msg = message_queues[s].get_nowait()
-                except queue.Empty:
-                    outputs.remove(s)
-                else:
+                if s in message_queues:  # Ensure the socket is in message_queues
                     try:
-                        s.sendall(next_msg)
-                        logging.debug(f"Sent data to {s.getpeername()}")
-                    except Exception as e:
-                        logging.error(f"Send error: {e}")
-                        if s in outputs:
-                            outputs.remove(s)
-                        inputs.remove(s)
-                        s.close()
-                        del message_queues[s]
+                        next_msg = message_queues[s].get_nowait()
+                    except queue.Empty:
+                        outputs.remove(s)
+                    else:
+                        try:
+                            s.sendall(next_msg)
+                            logging.debug(f"Sent data to {s.getpeername()}")
+                        except Exception as e:
+                            logging.error(f"Send error: {e}")
+                            if s in outputs:
+                                outputs.remove(s)
+                            inputs.remove(s)
+                            s.close()
+                            if s in message_queues:
+                                del message_queues[s]
+                else:
+                    logging.warning(f"Socket {s} not in message_queues")
 
             for s in exceptional:
                 logging.error(f"Exception on {s.getpeername()}")
